@@ -1,0 +1,5 @@
+student_id: 20P002
+first_name: MO
+last_name: Ali
+department: Engineering school
+enrollment_year: 2030
