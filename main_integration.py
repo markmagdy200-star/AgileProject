@@ -13,7 +13,7 @@ from Student_Manager import StudentManager
 
 def setup_and_demo_system():
     """Initializes and demonstrates the integrated system."""
-    
+    2
     # --- Initialization ---
     
     print("--- 📚 System Initialization ---")
