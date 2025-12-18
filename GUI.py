@@ -11,12 +11,14 @@ from equipment_management import (
     PersonAllocationManager, LaboratoryEquipmentManager
 )
 from Student_Manager import StudentManager
+from Curriculum_Manager import CurriculumManager, Course, StudentPlanner
+from LMS_Manager import LMSManager, LMSContent, Assignment, Quiz, ContentType, AssignmentType, Gradebook, Feedback
 
 class UniversityManagementGUI:
     def __init__(self, root):
         self.root = root
         self.root.title("University Management System")
-        self.root.geometry("1200x800")
+        self.root.geometry("1300x800")  # Increased width for more tabs
         
         # Initialize managers
         self.setup_managers()
@@ -32,6 +34,9 @@ class UniversityManagementGUI:
         self.create_lab_equipment_tab()
         self.create_student_tab()
         self.create_people_tab()
+        self.create_curriculum_tab()      # NEW: Curriculum tab
+        self.create_lms_tab()            # NEW: LMS tab
+        self.create_student_portal_tab() # NEW: Student Portal tab
         self.create_dashboard_tab()
         
     def setup_managers(self):
@@ -42,6 +47,9 @@ class UniversityManagementGUI:
         self.person_manager = PersonAllocationManager()
         self.lab_eq_manager = LaboratoryEquipmentManager()
         self.student_manager = StudentManager()
+        self.curriculum_manager = CurriculumManager()  # NEW
+        self.student_planner = StudentPlanner()        # NEW
+        self.lms_manager = LMSManager()               # NEW
         
         # Add some sample data
         self.add_sample_data()
@@ -79,6 +87,65 @@ class UniversityManagementGUI:
             "department": "Spy School", 
             "enrollment_year": 2021
         })
+        
+        # NEW: Sample curriculum data
+        sample_courses = [
+            Course("CS101", "Introduction to Programming", 3, "Computer Engineering", 
+                  "Basic programming concepts with Python", ["None"]),
+            Course("CS201", "Data Structures", 4, "Computer Engineering", 
+                  "Advanced data structures and algorithms", ["CS101"]),
+            Course("ME101", "Engineering Mechanics", 3, "Mechanical Engineering",
+                  "Basic mechanics principles and applications"),
+            Course("EE201", "Circuit Analysis", 4, "Electrical Engineering",
+                  "Analysis of electrical circuits and systems")
+        ]
+        
+        for course in sample_courses:
+            try:
+                course.is_core = True  # Mark as core courses
+                self.curriculum_manager.add_course(course)
+            except:
+                pass  # Course might already exist
+        
+        # NEW: Sample student enrollments
+        self.curriculum_manager.enroll_student("CS101", "007")
+        self.curriculum_manager.enroll_student("CS201", "007")
+        
+        # NEW: Sample LMS content
+        content = LMSContent(
+            "CONT_001",
+            "CS101",
+            "Introduction to Python",
+            ContentType.VIDEO,
+            "https://example.com/python-intro",
+            "Basic Python programming tutorial"
+        )
+        self.lms_manager.add_content(content)
+        
+        # NEW: Sample assignment
+        assignment = Assignment(
+            "ASSIGN_001",
+            "CS101",
+            "Python Basics Assignment",
+            "Complete the following Python exercises",
+            "2024-12-15",
+            100,
+            AssignmentType.HOMEWORK
+        )
+        self.lms_manager.create_assignment(assignment)
+        
+        # NEW: Sample quiz
+        quiz = Quiz(
+            "QUIZ_001",
+            "CS101",
+            "Python Fundamentals Quiz",
+            [
+                {"question": "What is Python?", "options": ["A snake", "A programming language", "A type of food", "A car"], "correct_answer": 1},
+                {"question": "What symbol is used for comments?", "options": ["//", "#", "/*", "<!--"], "correct_answer": 1},
+                {"question": "Which is a Python data type?", "options": ["int", "string", "list", "All of the above"], "correct_answer": 3}
+            ]
+        )
+        self.lms_manager.create_quiz(quiz)
 
     def create_classroom_tab(self):
         """Create classroom management tab"""
@@ -405,6 +472,267 @@ class UniversityManagementGUI:
                   command=self.refresh_people_info).pack(pady=5)
         
         self.refresh_people_info()
+    
+    def create_curriculum_tab(self):
+        """Create curriculum and course catalogue management tab"""
+        frame = ttk.Frame(self.notebook)
+        self.notebook.add(frame, text="Curriculum")
+        
+        # Notebook within tab for organization
+        curriculum_notebook = ttk.Notebook(frame)
+        curriculum_notebook.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+        
+        # Sub-tab 1: Course Catalogue
+        catalogue_frame = ttk.Frame(curriculum_notebook)
+        curriculum_notebook.add(catalogue_frame, text="Course Catalogue")
+        
+        # Left panel - Course Management
+        input_frame = ttk.LabelFrame(catalogue_frame, text="Course Management", padding=10)
+        input_frame.pack(side=tk.LEFT, fill=tk.Y, padx=5, pady=5)
+        
+        # Course form
+        ttk.Label(input_frame, text="Course Code:").grid(row=0, column=0, sticky=tk.W, pady=2)
+        self.course_code = ttk.Entry(input_frame)
+        self.course_code.grid(row=0, column=1, pady=2)
+        
+        ttk.Label(input_frame, text="Course Name:").grid(row=1, column=0, sticky=tk.W, pady=2)
+        self.course_name = ttk.Entry(input_frame)
+        self.course_name.grid(row=1, column=1, pady=2)
+        
+        ttk.Label(input_frame, text="Credits:").grid(row=2, column=0, sticky=tk.W, pady=2)
+        self.course_credits = ttk.Entry(input_frame)
+        self.course_credits.grid(row=2, column=1, pady=2)
+        
+        ttk.Label(input_frame, text="Department:").grid(row=3, column=0, sticky=tk.W, pady=2)
+        self.course_dept = ttk.Combobox(input_frame, values=self.curriculum_manager.departments)
+        self.course_dept.grid(row=3, column=1, pady=2)
+        
+        ttk.Label(input_frame, text="Description:").grid(row=4, column=0, sticky=tk.W, pady=2)
+        self.course_desc = tk.Text(input_frame, height=3, width=30)
+        self.course_desc.grid(row=4, column=1, pady=2)
+        
+        self.course_is_core = tk.BooleanVar()
+        ttk.Checkbutton(input_frame, text="Core Course", variable=self.course_is_core).grid(row=5, column=0, columnspan=2, pady=2)
+        
+        # Buttons
+        btn_frame = ttk.Frame(input_frame)
+        btn_frame.grid(row=6, column=0, columnspan=2, pady=10)
+        
+        ttk.Button(btn_frame, text="Add Course", command=self.add_course).pack(side=tk.LEFT, padx=5)
+        ttk.Button(btn_frame, text="Update Course", command=self.update_course).pack(side=tk.LEFT, padx=5)
+        ttk.Button(btn_frame, text="Delete Course", command=self.delete_course).pack(side=tk.LEFT, padx=5)
+        
+        # Right panel - Course List
+        display_frame = ttk.LabelFrame(catalogue_frame, text="Course List", padding=10)
+        display_frame.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True, padx=5, pady=5)
+        
+        # Treeview for courses
+        columns = ("Code", "Name", "Credits", "Department", "Core", "Enrolled")
+        self.course_tree = ttk.Treeview(display_frame, columns=columns, show="headings", height=15)
+        
+        for col in columns:
+            self.course_tree.heading(col, text=col)
+            self.course_tree.column(col, width=100)
+        
+        scrollbar = ttk.Scrollbar(display_frame, orient=tk.VERTICAL, command=self.course_tree.yview)
+        self.course_tree.configure(yscroll=scrollbar.set)
+        
+        self.course_tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        
+        ttk.Button(display_frame, text="Refresh Courses", command=self.refresh_courses).pack(pady=5)
+        
+        # Sub-tab 2: Student Planning
+        planning_frame = ttk.Frame(curriculum_notebook)
+        curriculum_notebook.add(planning_frame, text="Study Planning")
+        
+        # Student planning interface
+        planning_input = ttk.LabelFrame(planning_frame, text="Study Plan", padding=10)
+        planning_input.pack(fill=tk.X, padx=10, pady=5)
+        
+        ttk.Label(planning_input, text="Student ID:").grid(row=0, column=0, sticky=tk.W, pady=2)
+        self.plan_student_id = ttk.Entry(planning_input)
+        self.plan_student_id.grid(row=0, column=1, pady=2)
+        
+        ttk.Label(planning_input, text="Semester:").grid(row=1, column=0, sticky=tk.W, pady=2)
+        self.plan_semester = ttk.Combobox(planning_input, values=["Fall 2024", "Spring 2025", "Summer 2025"])
+        self.plan_semester.grid(row=1, column=1, pady=2)
+        
+        ttk.Label(planning_input, text="Select Course:").grid(row=2, column=0, sticky=tk.W, pady=2)
+        self.plan_course = ttk.Combobox(planning_input)
+        self.plan_course.grid(row=2, column=1, pady=2)
+        
+        ttk.Button(planning_input, text="Add to Plan", command=self.add_to_plan).grid(row=3, column=0, columnspan=2, pady=5)
+        
+        # Display study plan
+        plan_display = ttk.LabelFrame(planning_frame, text="Current Study Plan", padding=10)
+        plan_display.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
+        
+        self.plan_display_text = tk.Text(plan_display, height=15)
+        self.plan_display_text.pack(fill=tk.BOTH, expand=True)
+        
+        self.refresh_courses()
+    
+    def create_lms_tab(self):
+        """Create Learning Management System tab"""
+        frame = ttk.Frame(self.notebook)
+        self.notebook.add(frame, text="LMS")
+        
+        # Notebook for LMS organization
+        lms_notebook = ttk.Notebook(frame)
+        lms_notebook.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+        
+        # Sub-tab 1: Content Management
+        content_frame = ttk.Frame(lms_notebook)
+        lms_notebook.add(content_frame, text="Content")
+        
+        # Content management interface
+        content_input = ttk.LabelFrame(content_frame, text="Add Content", padding=10)
+        content_input.pack(fill=tk.X, padx=10, pady=5)
+        
+        ttk.Label(content_input, text="Course Code:").grid(row=0, column=0, sticky=tk.W, pady=2)
+        self.content_course = ttk.Combobox(content_input)
+        self.content_course.grid(row=0, column=1, pady=2)
+        
+        ttk.Label(content_input, text="Title:").grid(row=1, column=0, sticky=tk.W, pady=2)
+        self.content_title = ttk.Entry(content_input)
+        self.content_title.grid(row=1, column=1, pady=2)
+        
+        ttk.Label(content_input, text="Type:").grid(row=2, column=0, sticky=tk.W, pady=2)
+        self.content_type = ttk.Combobox(content_input, values=[t.value for t in ContentType])
+        self.content_type.grid(row=2, column=1, pady=2)
+        
+        ttk.Label(content_input, text="URL/Path:").grid(row=3, column=0, sticky=tk.W, pady=2)
+        self.content_url = ttk.Entry(content_input)
+        self.content_url.grid(row=3, column=1, pady=2)
+        
+        ttk.Label(content_input, text="Description:").grid(row=4, column=0, sticky=tk.W, pady=2)
+        self.content_desc = tk.Text(content_input, height=2, width=30)
+        self.content_desc.grid(row=4, column=1, pady=2)
+        
+        ttk.Button(content_input, text="Add Content", command=self.add_lms_content).grid(row=5, column=0, columnspan=2, pady=5)
+        
+        # Content display
+        content_display = ttk.LabelFrame(content_frame, text="Course Content", padding=10)
+        content_display.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
+        
+        self.content_list_display = tk.Text(content_display, height=15)
+        self.content_list_display.pack(fill=tk.BOTH, expand=True)
+        
+        ttk.Button(content_display, text="Refresh Content", command=self.refresh_lms_content).pack(pady=5)
+        
+        # Sub-tab 2: Assignments & Quizzes
+        assignments_frame = ttk.Frame(lms_notebook)
+        lms_notebook.add(assignments_frame, text="Assignments & Quizzes")
+        
+        # Assignment creation interface
+        assignment_input = ttk.LabelFrame(assignments_frame, text="Create Assignment", padding=10)
+        assignment_input.pack(fill=tk.X, padx=10, pady=5)
+        
+        ttk.Label(assignment_input, text="Course Code:").grid(row=0, column=0, sticky=tk.W, pady=2)
+        self.assign_course = ttk.Combobox(assignment_input)
+        self.assign_course.grid(row=0, column=1, pady=2)
+        
+        ttk.Label(assignment_input, text="Title:").grid(row=1, column=0, sticky=tk.W, pady=2)
+        self.assign_title = ttk.Entry(assignment_input)
+        self.assign_title.grid(row=1, column=1, pady=2)
+        
+        ttk.Label(assignment_input, text="Max Points:").grid(row=2, column=0, sticky=tk.W, pady=2)
+        self.assign_points = ttk.Entry(assignment_input)
+        self.assign_points.grid(row=2, column=1, pady=2)
+        
+        ttk.Label(assignment_input, text="Due Date:").grid(row=3, column=0, sticky=tk.W, pady=2)
+        self.assign_due = ttk.Entry(assignment_input)
+        self.assign_due.grid(row=3, column=1, pady=2)
+        self.assign_due.insert(0, "2024-12-15")
+        
+        ttk.Button(assignment_input, text="Create Assignment", command=self.create_assignment).grid(row=4, column=0, columnspan=2, pady=5)
+        
+        # Quiz creation interface
+        quiz_input = ttk.LabelFrame(assignments_frame, text="Create Quiz", padding=10)
+        quiz_input.pack(fill=tk.X, padx=10, pady=5)
+        
+        ttk.Label(quiz_input, text="Course Code:").grid(row=0, column=0, sticky=tk.W, pady=2)
+        self.quiz_course = ttk.Combobox(quiz_input)
+        self.quiz_course.grid(row=0, column=1, pady=2)
+        
+        ttk.Label(quiz_input, text="Quiz Title:").grid(row=1, column=0, sticky=tk.W, pady=2)
+        self.quiz_title = ttk.Entry(quiz_input)
+        self.quiz_title.grid(row=1, column=1, pady=2)
+        
+        ttk.Button(quiz_input, text="Create Sample Quiz", command=self.create_sample_quiz).grid(row=2, column=0, columnspan=2, pady=5)
+        
+        # Display area
+        assignment_display = ttk.LabelFrame(assignments_frame, text="Assignments & Quizzes", padding=10)
+        assignment_display.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
+        
+        self.assignment_display = tk.Text(assignment_display, height=10)
+        self.assignment_display.pack(fill=tk.BOTH, expand=True)
+        
+        self.refresh_courses()  # To populate comboboxes
+    
+    def create_student_portal_tab(self):
+        """Create student portal tab for viewing grades and content"""
+        frame = ttk.Frame(self.notebook)
+        self.notebook.add(frame, text="Student Portal")
+        
+        # Student selection
+        select_frame = ttk.LabelFrame(frame, text="Student Information", padding=10)
+        select_frame.pack(fill=tk.X, padx=10, pady=5)
+        
+        ttk.Label(select_frame, text="Student ID:").grid(row=0, column=0, sticky=tk.W, pady=2)
+        self.portal_student = ttk.Combobox(select_frame, values=self.get_student_ids())
+        self.portal_student.grid(row=0, column=1, pady=2)
+        ttk.Button(select_frame, text="Load Student Data", command=self.load_student_portal).grid(row=0, column=2, padx=5)
+        
+        # Notebook for student views
+        portal_notebook = ttk.Notebook(frame)
+        portal_notebook.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
+        
+        # Grades view
+        grades_frame = ttk.Frame(portal_notebook)
+        portal_notebook.add(grades_frame, text="Grades")
+        
+        self.grades_display = tk.Text(grades_frame, height=20)
+        self.grades_display.pack(fill=tk.BOTH, expand=True)
+        
+        # Course content view
+        content_frame = ttk.Frame(portal_notebook)
+        portal_notebook.add(content_frame, text="Course Content")
+        
+        self.portal_content_display = tk.Text(content_frame, height=20)
+        self.portal_content_display.pack(fill=tk.BOTH, expand=True)
+        
+        # Feedback view
+        feedback_frame = ttk.Frame(portal_notebook)
+        portal_notebook.add(feedback_frame, text="Give Feedback")
+        
+        feedback_input = ttk.LabelFrame(feedback_frame, text="Course Feedback", padding=10)
+        feedback_input.pack(fill=tk.X, padx=10, pady=5)
+        
+        ttk.Label(feedback_input, text="Course Code:").grid(row=0, column=0, sticky=tk.W, pady=2)
+        self.feedback_course = ttk.Combobox(feedback_input)
+        self.feedback_course.grid(row=0, column=1, pady=2)
+        
+        ttk.Label(feedback_input, text="Rating (1-5):").grid(row=1, column=0, sticky=tk.W, pady=2)
+        self.feedback_rating = ttk.Combobox(feedback_input, values=[1, 2, 3, 4, 5])
+        self.feedback_rating.grid(row=1, column=1, pady=2)
+        
+        ttk.Label(feedback_input, text="Feedback:").grid(row=2, column=0, sticky=tk.W, pady=2)
+        self.feedback_text = tk.Text(feedback_input, height=3, width=40)
+        self.feedback_text.grid(row=2, column=1, pady=2)
+        
+        ttk.Button(feedback_input, text="Submit Feedback", command=self.submit_feedback).grid(row=3, column=0, columnspan=2, pady=5)
+        
+        # Display feedback
+        feedback_display = ttk.LabelFrame(feedback_frame, text="Course Ratings", padding=10)
+        feedback_display.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
+        
+        self.feedback_display = tk.Text(feedback_display, height=10)
+        self.feedback_display.pack(fill=tk.BOTH, expand=True)
+        
+        # Update combobox values
+        self.refresh_courses()
     
     def create_dashboard_tab(self):
         """Create dashboard tab with system overview"""
@@ -749,6 +1077,291 @@ class UniversityManagementGUI:
         
         self.people_display.insert(tk.END, info)
     
+    # Curriculum Methods
+    def refresh_courses(self):
+        """Refresh course list in treeview"""
+        for item in self.course_tree.get_children():
+            self.course_tree.delete(item)
+        
+        courses = self.curriculum_manager.list_courses()
+        for course in courses:
+            self.course_tree.insert("", tk.END, values=(
+                course.course_code,
+                course.course_name,
+                course.credits,
+                course.department,
+                "Yes" if course.is_core else "No",
+                len(course.students_enrolled)
+            ))
+        
+        # Update comboboxes
+        course_codes = [c.course_code for c in courses]
+        self.plan_course['values'] = course_codes
+        self.content_course['values'] = course_codes
+        self.assign_course['values'] = course_codes
+        self.quiz_course['values'] = course_codes
+        self.feedback_course['values'] = course_codes
+    
+    def add_course(self):
+        """Add a new course to catalogue"""
+        try:
+            course = Course(
+                course_code=self.course_code.get(),
+                course_name=self.course_name.get(),
+                credits=int(self.course_credits.get()),
+                department=self.course_dept.get(),
+                description=self.course_desc.get("1.0", tk.END).strip()
+            )
+            course.is_core = self.course_is_core.get()
+            
+            self.curriculum_manager.add_course(course)
+            messagebox.showinfo("Success", f"Course {course.course_code} added successfully!")
+            self.refresh_courses()
+            self.clear_course_form()
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to add course: {str(e)}")
+    
+    def update_course(self):
+        """Update selected course"""
+        try:
+            selected = self.course_tree.selection()
+            if not selected:
+                messagebox.showwarning("Warning", "Please select a course to update.")
+                return
+            
+            course_code = self.course_tree.item(selected[0])['values'][0]
+            updates = {
+                "course_name": self.course_name.get(),
+                "credits": int(self.course_credits.get()),
+                "department": self.course_dept.get(),
+                "description": self.course_desc.get("1.0", tk.END).strip(),
+                "is_core": self.course_is_core.get()
+            }
+            
+            self.curriculum_manager.update_course(course_code, updates)
+            messagebox.showinfo("Success", f"Course {course_code} updated successfully!")
+            self.refresh_courses()
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to update course: {str(e)}")
+    
+    def delete_course(self):
+        """Delete selected course"""
+        try:
+            selected = self.course_tree.selection()
+            if not selected:
+                messagebox.showwarning("Warning", "Please select a course to delete.")
+                return
+            
+            course_code = self.course_tree.item(selected[0])['values'][0]
+            
+            if messagebox.askyesno("Confirm Delete", f"Delete course {course_code}?"):
+                self.curriculum_manager.delete_course(course_code)
+                messagebox.showinfo("Success", f"Course {course_code} deleted successfully!")
+                self.refresh_courses()
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to delete course: {str(e)}")
+    
+    def add_to_plan(self):
+        """Add course to student's study plan"""
+        try:
+            student_id = self.plan_student_id.get()
+            semester = self.plan_semester.get()
+            course_code = self.plan_course.get()
+            
+            if not all([student_id, semester, course_code]):
+                messagebox.showwarning("Warning", "Please fill all fields.")
+                return
+            
+            self.student_planner.add_course_to_plan(student_id, semester, course_code)
+            messagebox.showinfo("Success", f"Added {course_code} to {semester} plan!")
+            
+            # Display updated plan
+            plan = self.student_planner.get_study_plan(student_id, semester)
+            self.plan_display_text.delete(1.0, tk.END)
+            self.plan_display_text.insert(tk.END, f"Study Plan for {student_id} - {semester}:\n\n")
+            for course_code in plan.get(semester, []):
+                course = self.curriculum_manager.get_course(course_code)
+                if course:
+                    self.plan_display_text.insert(tk.END, f"• {course.course_code}: {course.course_name} ({course.credits} credits)\n")
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to add to plan: {str(e)}")
+    
+    def clear_course_form(self):
+        """Clear course input form"""
+        self.course_code.delete(0, tk.END)
+        self.course_name.delete(0, tk.END)
+        self.course_credits.delete(0, tk.END)
+        self.course_dept.set('')
+        self.course_desc.delete(1.0, tk.END)
+        self.course_is_core.set(False)
+    
+    # LMS Methods
+    def add_lms_content(self):
+        """Add LMS content for a course"""
+        try:
+            content = LMSContent(
+                content_id=f"CONT_{datetime.now().strftime('%Y%m%d%H%M%S')}",
+                course_code=self.content_course.get(),
+                title=self.content_title.get(),
+                content_type=ContentType(self.content_type.get()),
+                url_or_path=self.content_url.get(),
+                description=self.content_desc.get("1.0", tk.END).strip()
+            )
+            
+            self.lms_manager.add_content(content)
+            messagebox.showinfo("Success", "Content added successfully!")
+            self.clear_lms_content_form()
+            self.refresh_lms_content()
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to add content: {str(e)}")
+    
+    def refresh_lms_content(self):
+        """Refresh LMS content display"""
+        self.content_list_display.delete(1.0, tk.END)
+        course_code = self.content_course.get()
+        if course_code:
+            contents = self.lms_manager.get_course_content(course_code)
+            self.content_list_display.insert(tk.END, f"Content for {course_code}:\n\n")
+            for content in contents:
+                self.content_list_display.insert(tk.END, f"Title: {content.title}\n")
+                self.content_list_display.insert(tk.END, f"Type: {content.content_type.value}\n")
+                self.content_list_display.insert(tk.END, f"URL: {content.url_or_path}\n")
+                self.content_list_display.insert(tk.END, f"Description: {content.description}\n")
+                self.content_list_display.insert(tk.END, "-"*40 + "\n\n")
+    
+    def clear_lms_content_form(self):
+        """Clear LMS content form"""
+        self.content_title.delete(0, tk.END)
+        self.content_type.set('')
+        self.content_url.delete(0, tk.END)
+        self.content_desc.delete(1.0, tk.END)
+    
+    def create_assignment(self):
+        """Create a new assignment"""
+        try:
+            assignment = Assignment(
+                assignment_id=f"ASSIGN_{datetime.now().strftime('%Y%m%d%H%M%S')}",
+                course_code=self.assign_course.get(),
+                title=self.assign_title.get(),
+                description="Complete the assignment by the due date.",
+                due_date=self.assign_due.get(),
+                max_points=float(self.assign_points.get()),
+                assignment_type=AssignmentType.HOMEWORK
+            )
+            
+            self.lms_manager.create_assignment(assignment)
+            messagebox.showinfo("Success", "Assignment created successfully!")
+            self.clear_assignment_form()
+            self.refresh_assignment_display()
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to create assignment: {str(e)}")
+    
+    def create_sample_quiz(self):
+        """Create a sample quiz"""
+        try:
+            quiz = Quiz(
+                quiz_id=f"QUIZ_{datetime.now().strftime('%Y%m%d%H%M%S')}",
+                course_code=self.quiz_course.get(),
+                title=self.quiz_title.get(),
+                questions=[
+                    {"question": "Question 1?", "options": ["Option A", "Option B", "Option C", "Option D"], "correct_answer": 1},
+                    {"question": "Question 2?", "options": ["Option A", "Option B", "Option C", "Option D"], "correct_answer": 2},
+                    {"question": "Question 3?", "options": ["Option A", "Option B", "Option C", "Option D"], "correct_answer": 0}
+                ]
+            )
+            
+            self.lms_manager.create_quiz(quiz)
+            messagebox.showinfo("Success", "Sample quiz created successfully!")
+            self.refresh_assignment_display()
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to create quiz: {str(e)}")
+    
+    def refresh_assignment_display(self):
+        """Refresh assignments and quizzes display"""
+        self.assignment_display.delete(1.0, tk.END)
+        self.assignment_display.insert(tk.END, "Assignments and Quizzes will be displayed here.\n")
+        self.assignment_display.insert(tk.END, "This feature can be expanded to show all assignments and quizzes.\n")
+    
+    def clear_assignment_form(self):
+        """Clear assignment form"""
+        self.assign_title.delete(0, tk.END)
+        self.assign_points.delete(0, tk.END)
+        self.assign_due.delete(0, tk.END)
+    
+    # Student Portal Methods
+    def load_student_portal(self):
+        """Load student data for portal"""
+        student_id = self.portal_student.get()
+        if not student_id:
+            return
+        
+        # Load grades
+        self.grades_display.delete(1.0, tk.END)
+        self.grades_display.insert(tk.END, f"Grades for Student: {student_id}\n\n")
+        
+        # Get student's courses
+        student_courses = self.curriculum_manager.get_student_courses(student_id)
+        
+        for course in student_courses:
+            gradebook = self.lms_manager.get_gradebook(course.course_code)
+            grades = gradebook.get_student_grades(student_id)
+            
+            self.grades_display.insert(tk.END, f"Course: {course.course_code} - {course.course_name}\n")
+            if grades:
+                for category in ["assignments", "quizzes", "exams"]:
+                    if category in grades and grades[category]:
+                        self.grades_display.insert(tk.END, f"  {category.capitalize()}:\n")
+                        for item_id, item_data in grades[category].items():
+                            self.grades_display.insert(tk.END, f"    {item_id}: {item_data['grade']}/{item_data['max']}\n")
+                
+                if grades.get("final_grade"):
+                    self.grades_display.insert(tk.END, f"  Final Grade: {grades['final_grade']:.1f}\n")
+            else:
+                self.grades_display.insert(tk.END, "  No grades available\n")
+            self.grades_display.insert(tk.END, "\n")
+        
+        # Load course content
+        self.portal_content_display.delete(1.0, tk.END)
+        self.portal_content_display.insert(tk.END, f"Available Content for Student: {student_id}\n\n")
+        
+        for course in student_courses:
+            contents = self.lms_manager.get_course_content(course.course_code)
+            if contents:
+                self.portal_content_display.insert(tk.END, f"Course: {course.course_code}\n")
+                for content in contents:
+                    self.portal_content_display.insert(tk.END, f"  • {content.title} ({content.content_type.value})\n")
+                self.portal_content_display.insert(tk.END, "\n")
+        
+        # Load feedback ratings
+        self.feedback_display.delete(1.0, tk.END)
+        self.feedback_display.insert(tk.END, "Course Ratings:\n\n")
+        for course in student_courses:
+            feedback = self.lms_manager.get_feedback(course.course_code)
+            avg_rating = feedback.get_average_rating()
+            self.feedback_display.insert(tk.END, f"{course.course_code}: {avg_rating:.1f}/5.0\n")
+    
+    def submit_feedback(self):
+        """Submit student feedback for a course"""
+        try:
+            student_id = self.portal_student.get()
+            course_code = self.feedback_course.get()
+            rating = int(self.feedback_rating.get())
+            feedback_text = self.feedback_text.get("1.0", tk.END).strip()
+            
+            if not all([student_id, course_code, feedback_text]):
+                messagebox.showwarning("Warning", "Please fill all fields.")
+                return
+            
+            feedback = self.lms_manager.get_feedback(course_code)
+            feedback.add_feedback(student_id, feedback_text, rating)
+            self.lms_manager.save_feedback(feedback)
+            
+            messagebox.showinfo("Success", "Feedback submitted successfully!")
+            self.feedback_text.delete(1.0, tk.END)
+            self.load_student_portal()  # Refresh portal
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to submit feedback: {str(e)}")
+    
     # Dashboard Methods
     def refresh_dashboard(self):
         self.dashboard_display.delete(1.0, tk.END)
@@ -792,7 +1405,23 @@ class UniversityManagementGUI:
         # Student Records Summary
         students = self.student_manager.list_students()
         info += "🎓 STUDENT RECORDS:\n"
-        info += f"  Total Students: {len(students)}\n"
+        info += f"  Total Students: {len(students)}\n\n"
+        
+        # NEW: Curriculum Summary
+        courses = self.curriculum_manager.list_courses()
+        info += "📚 CURRICULUM:\n"
+        info += f"  Total Courses: {len(courses)}\n"
+        core_courses = sum(1 for c in courses if c.is_core)
+        info += f"  Core Courses: {core_courses}\n"
+        elective_courses = len(courses) - core_courses
+        info += f"  Elective Courses: {elective_courses}\n"
+        total_enrollments = sum(len(c.students_enrolled) for c in courses)
+        info += f"  Total Enrollments: {total_enrollments}\n\n"
+        
+        # NEW: LMS Summary
+        info += "🎓 LEARNING MANAGEMENT SYSTEM:\n"
+        info += f"  Active Courses: {len(courses)}\n"
+        info += f"  Students with LMS Access: {len(students)}\n"
         
         self.dashboard_display.insert(tk.END, info)
 
