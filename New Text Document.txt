@@ -1,0 +1,2750 @@
+Classroom_manager.py
+
+from dataclasses import dataclass, field
+from datetime import datetime
+from typing import List, Optional
+
+@dataclass
+class Classroom:
+    id: str
+    capacity: int
+    location: Optional[str] = None
+    is_under_maintenance: bool = False
+    maintenance_notes: List[str] = field(default_factory=list)
+
+@dataclass
+class Reservation:
+    id: int
+    classroom_id: str
+    reserved_by: str
+    start: datetime
+    end: datetime
+
+class Scheduler:
+    def __init__(self):
+        self.classrooms: List[Classroom] = []
+        self.reservations: List[Reservation] = []
+        self._next_reservation_id = 1
+
+    # -------------------------
+    # CLASSROOM MANAGEMENT
+    # -------------------------
+    def add_classroom(self, room: Classroom):
+        self.classrooms.append(room)
+
+    def report_maintenance(self, classroom_id: str, description: str):
+        room = self._find_room(classroom_id)
+        room.is_under_maintenance = True
+        room.maintenance_notes.append(description)
+        return f"Maintenance reported for {classroom_id}: {description}"
+
+    def resolve_maintenance(self, classroom_id: str):
+        room = self._find_room(classroom_id)
+        room.is_under_maintenance = False
+        return f"Maintenance resolved for {classroom_id}"
+
+    def get_maintenance_reports(self, classroom_id: Optional[str] = None):
+        if classroom_id:
+            room = self._find_room(classroom_id)
+            return room.maintenance_notes
+        # all rooms
+        return {r.id: r.maintenance_notes for r in self.classrooms}
+
+    # -------------------------
+    # RESERVATION SYSTEM
+    # -------------------------
+    def reserve_classroom(self, classroom_id: str, start: datetime, end: datetime, reserved_by: str):
+        room = self._find_room(classroom_id)
+
+        if room.is_under_maintenance:
+            return f"Classroom {classroom_id} is unavailable (maintenance)."
+
+        # Check reservation conflicts
+        for r in self.reservations:
+            if r.classroom_id == classroom_id and not (end <= r.start or start >= r.end):
+                return f"Classroom {classroom_id} is already reserved in this time slot."
+
+        res = Reservation(
+            id=self._next_reservation_id,
+            classroom_id=classroom_id,
+            reserved_by=reserved_by,
+            start=start,
+            end=end
+        )
+
+        self.reservations.append(res)
+        self._next_reservation_id += 1
+
+        return f"Reservation {res.id} created for classroom {classroom_id}"
+
+    def check_availability(self, classroom_id: str, start: datetime, end: datetime) -> bool:
+        room = self._find_room(classroom_id)
+
+        if room.is_under_maintenance:
+            return False
+
+        for r in self.reservations:
+            if r.classroom_id == classroom_id and not (end <= r.start or start >= r.end):
+                return False
+
+        return True
+
+    # -------------------------
+    # Helper
+    # -------------------------
+    def _find_room(self, classroom_id: str) -> Classroom:
+        room = next((r for r in self.classrooms if r.id == classroom_id), None)
+        if not room:
+            raise ValueError(f"Classroom {classroom_id} not found")
+        return room
+
+communityManager.py
+
+# Community_Manager.py
+
+from datetime import datetime
+from typing import List, Dict, Optional
+import uuid
+
+
+# ---------------------------------------------------------
+# Core Models
+# ---------------------------------------------------------
+
+class Message:
+    def __init__(self, sender_id: str, receiver_id: str, content: str):
+        self.message_id = str(uuid.uuid4())
+        self.sender_id = sender_id
+        self.receiver_id = receiver_id
+        self.content = content
+        self.timestamp = datetime.now().isoformat()
+        self.is_deleted_by_sender = False
+        self.is_deleted_by_receiver = False
+
+
+class Announcement:
+    def __init__(self, created_by: str, title: str, content: str, target: Dict):
+        """
+        target examples:
+        {"type": "course", "course_code": "CS101"}
+        {"type": "department", "department": "Computer Engineering"}
+        """
+        self.announcement_id = str(uuid.uuid4())
+        self.created_by = created_by
+        self.title = title
+        self.content = content
+        self.target = target
+        self.timestamp = datetime.now().isoformat()
+
+
+class MeetingRequest:
+    def __init__(self, student_id: str, professor_id: str, proposed_time: str, note: str = ""):
+        self.request_id = str(uuid.uuid4())
+        self.student_id = student_id
+        self.professor_id = professor_id
+        self.proposed_time = proposed_time
+        self.note = note
+        self.status = "PENDING"  # PENDING | APPROVED | REJECTED
+        self.created_at = datetime.now().isoformat()
+
+
+# ---------------------------------------------------------
+# Community Manager
+# ---------------------------------------------------------
+
+class CommunityManager:
+    def __init__(self, curriculum_manager=None, lms_manager=None):
+        # Messaging
+        self.messages: List[Message] = []
+
+        # Announcements
+        self.announcements: List[Announcement] = []
+
+        # Meetings
+        self.meeting_requests: List[MeetingRequest] = []
+
+        # Parent -> students mapping
+        self.parent_students: Dict[str, List[str]] = {}
+
+        # External modules (read-only usage)
+        self.curriculum_manager = curriculum_manager
+        self.lms_manager = lms_manager
+
+    # -----------------------------------------------------
+    # Parent Management
+    # -----------------------------------------------------
+
+    def register_parent(self, parent_id: str, student_ids: List[str]):
+        """One parent -> many students"""
+        self.parent_students[parent_id] = student_ids
+
+    def get_parent_students(self, parent_id: str) -> List[str]:
+        return self.parent_students.get(parent_id, [])
+
+    # -----------------------------------------------------
+    # Messaging
+    # -----------------------------------------------------
+
+    def send_message(self, sender_id: str, receiver_id: str, content: str):
+        message = Message(sender_id, receiver_id, content)
+        self.messages.append(message)
+        return message.message_id
+
+    def get_inbox(self, user_id: str) -> List[Message]:
+        return [
+            m for m in self.messages
+            if m.receiver_id == user_id and not m.is_deleted_by_receiver
+        ]
+
+    def get_sent_messages(self, user_id: str) -> List[Message]:
+        return [
+            m for m in self.messages
+            if m.sender_id == user_id and not m.is_deleted_by_sender
+        ]
+
+    def delete_message_for_user(self, message_id: str, user_id: str):
+        for msg in self.messages:
+            if msg.message_id == message_id:
+                if msg.sender_id == user_id:
+                    msg.is_deleted_by_sender = True
+                elif msg.receiver_id == user_id:
+                    msg.is_deleted_by_receiver = True
+                return True
+        return False
+
+    # -----------------------------------------------------
+    # Announcements
+    # -----------------------------------------------------
+
+    def create_announcement(self, created_by: str, title: str, content: str, target: Dict):
+        announcement = Announcement(created_by, title, content, target)
+        self.announcements.append(announcement)
+        return announcement.announcement_id
+
+    def get_announcements_for_student(self, student_id: str) -> List[Announcement]:
+        visible = []
+
+        student_courses = []
+        student_department = None
+
+        if self.curriculum_manager:
+            student_courses = [
+                c.course_code for c in self.curriculum_manager.get_student_courses(student_id)
+            ]
+
+            if student_courses:
+                student_department = self.curriculum_manager.get_course(student_courses[0]).department
+
+        for ann in self.announcements:
+            if ann.target["type"] == "course" and ann.target.get("course_code") in student_courses:
+                visible.append(ann)
+
+            elif ann.target["type"] == "department" and ann.target.get("department") == student_department:
+                visible.append(ann)
+
+        return visible
+
+    # -----------------------------------------------------
+    # Meeting Requests
+    # -----------------------------------------------------
+
+    def request_meeting(self, student_id: str, professor_id: str, proposed_time: str, note: str = ""):
+        request = MeetingRequest(student_id, professor_id, proposed_time, note)
+        self.meeting_requests.append(request)
+        return request.request_id
+
+    def respond_to_meeting(self, request_id: str, approve: bool):
+        for req in self.meeting_requests:
+            if req.request_id == request_id:
+                req.status = "APPROVED" if approve else "REJECTED"
+                return True
+        return False
+
+    def get_meetings_for_professor(self, professor_id: str) -> List[MeetingRequest]:
+        return [r for r in self.meeting_requests if r.professor_id == professor_id]
+
+    def get_meetings_for_student(self, student_id: str) -> List[MeetingRequest]:
+        return [r for r in self.meeting_requests if r.student_id == student_id]
+
+    # -----------------------------------------------------
+    # Parent: View Academic Progress (Read-Only)
+    # -----------------------------------------------------
+
+    def get_child_academic_progress(self, parent_id: str) -> Dict:
+        """
+        Returns grades for all children of a parent.
+        Consumes LMS Gradebook (read-only).
+        """
+        result = {}
+
+        if not self.lms_manager:
+            return result
+
+        for student_id in self.get_parent_students(parent_id):
+            result[student_id] = {}
+
+            # Iterate through all courses by scanning gradebooks folder
+            # (Same philosophy as LMSManager)
+            try:
+                for course_code in self.lms_manager.get_gradebook(course_code=None).grades.keys():
+                    gradebook = self.lms_manager.get_gradebook(course_code)
+                    result[student_id][course_code] = gradebook.get_student_grades(student_id)
+            except Exception:
+                pass
+
+        return result
+
+
+Curriculum_Manager.py
+
+# Curriculum_Manager.py
+import os
+import json
+from datetime import datetime
+from typing import List, Dict, Optional
+
+class Course:
+    def __init__(self, course_code: str, course_name: str, credits: int, 
+                 department: str, description: str = "", prerequisites: List[str] = None):
+        self.course_code = course_code
+        self.course_name = course_name
+        self.credits = credits
+        self.department = department
+        self.description = description
+        self.prerequisites = prerequisites or []
+        self.is_core = False
+        self.semesters_offered = []  # ["Fall", "Spring", "Summer"]
+        self.professor_id = ""
+        self.students_enrolled = []
+        
+    def to_dict(self):
+        return {
+            "course_code": self.course_code,
+            "course_name": self.course_name,
+            "credits": self.credits,
+            "department": self.department,
+            "description": self.description,
+            "prerequisites": self.prerequisites,
+            "is_core": self.is_core,
+            "semesters_offered": self.semesters_offered,
+            "professor_id": self.professor_id,
+            "students_enrolled": self.students_enrolled
+        }
+    
+    @classmethod
+    def from_dict(cls, data: dict):
+        course = cls(
+            data["course_code"],
+            data["course_name"],
+            data["credits"],
+            data["department"],
+            data.get("description", "")
+        )
+        course.prerequisites = data.get("prerequisites", [])
+        course.is_core = data.get("is_core", False)
+        course.semesters_offered = data.get("semesters_offered", [])
+        course.professor_id = data.get("professor_id", "")
+        course.students_enrolled = data.get("students_enrolled", [])
+        return course
+
+
+class CurriculumManager:
+    def __init__(self, storage_folder="curriculum"):
+        self.storage_folder = storage_folder
+        if not os.path.exists(storage_folder):
+            os.makedirs(storage_folder)
+        
+        self.core_courses = []
+        self.elective_courses = []
+        self.departments = ["Computer Engineering", "Mechanical Engineering", 
+                           "Electrical Engineering", "Civil Engineering", "General"]
+        
+    def _get_course_path(self, course_code: str) -> str:
+        return os.path.join(self.storage_folder, f"{course_code}.json")
+    
+    def add_course(self, course: Course):
+        """Add a new course to the catalogue"""
+        path = self._get_course_path(course.course_code)
+        
+        if os.path.exists(path):
+            raise ValueError(f"Course {course.course_code} already exists.")
+        
+        with open(path, 'w', encoding='utf-8') as f:
+            json.dump(course.to_dict(), f, indent=4)
+        
+        if course.is_core:
+            self.core_courses.append(course.course_code)
+        else:
+            self.elective_courses.append(course.course_code)
+    
+    def get_course(self, course_code: str) -> Optional[Course]:
+        """Retrieve a course by code"""
+        path = self._get_course_path(course_code)
+        
+        if not os.path.exists(path):
+            return None
+        
+        with open(path, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+            return Course.from_dict(data)
+    
+    def update_course(self, course_code: str, updates: dict):
+        """Update course information"""
+        course = self.get_course(course_code)
+        if not course:
+            raise ValueError(f"Course {course_code} not found.")
+        
+        # Update fields
+        for key, value in updates.items():
+            if hasattr(course, key):
+                setattr(course, key, value)
+        
+        # Save back
+        with open(self._get_course_path(course_code), 'w', encoding='utf-8') as f:
+            json.dump(course.to_dict(), f, indent=4)
+    
+    def delete_course(self, course_code: str) -> bool:
+        """Remove a course from catalogue"""
+        path = self._get_course_path(course_code)
+        
+        if os.path.exists(path):
+            os.remove(path)
+            
+            # Remove from lists
+            if course_code in self.core_courses:
+                self.core_courses.remove(course_code)
+            if course_code in self.elective_courses:
+                self.elective_courses.remove(course_code)
+                
+            return True
+        return False
+    
+    def list_courses(self, department: str = None, core_only: bool = False) -> List[Course]:
+        """List all courses, optionally filtered"""
+        courses = []
+        
+        for filename in os.listdir(self.storage_folder):
+            if filename.endswith(".json"):
+                course_code = filename.replace(".json", "")
+                course = self.get_course(course_code)
+                
+                if department and course.department != department:
+                    continue
+                if core_only and not course.is_core:
+                    continue
+                    
+                courses.append(course)
+        
+        return courses
+    
+    def assign_professor(self, course_code: str, professor_id: str):
+        """Assign a professor to teach a course"""
+        self.update_course(course_code, {"professor_id": professor_id})
+    
+    def enroll_student(self, course_code: str, student_id: str):
+        """Enroll a student in a course"""
+        course = self.get_course(course_code)
+        if not course:
+            raise ValueError(f"Course {course_code} not found.")
+        
+        if student_id not in course.students_enrolled:
+            course.students_enrolled.append(student_id)
+            self.update_course(course_code, {"students_enrolled": course.students_enrolled})
+    
+    def unenroll_student(self, course_code: str, student_id: str):
+        """Remove a student from a course"""
+        course = self.get_course(course_code)
+        if not course:
+            raise ValueError(f"Course {course_code} not found.")
+        
+        if student_id in course.students_enrolled:
+            course.students_enrolled.remove(student_id)
+            self.update_course(course_code, {"students_enrolled": course.students_enrolled})
+    
+    def get_student_courses(self, student_id: str) -> List[Course]:
+        """Get all courses a student is enrolled in"""
+        student_courses = []
+        
+        for filename in os.listdir(self.storage_folder):
+            if filename.endswith(".json"):
+                course_code = filename.replace(".json", "")
+                course = self.get_course(course_code)
+                
+                if student_id in course.students_enrolled:
+                    student_courses.append(course)
+        
+        return student_courses
+    
+    def get_professor_courses(self, professor_id: str) -> List[Course]:
+        """Get all courses taught by a professor"""
+        professor_courses = []
+        
+        for filename in os.listdir(self.storage_folder):
+            if filename.endswith(".json"):
+                course_code = filename.replace(".json", "")
+                course = self.get_course(course_code)
+                
+                if course.professor_id == professor_id:
+                    professor_courses.append(course)
+        
+        return professor_courses
+
+
+class StudentPlanner:
+    def __init__(self):
+        self.student_plans = {}  # student_id -> {semester: [course_codes]}
+    
+    def create_study_plan(self, student_id: str, semester: str, course_codes: List[str]):
+        """Create or update a student's semester study plan"""
+        if student_id not in self.student_plans:
+            self.student_plans[student_id] = {}
+        
+        self.student_plans[student_id][semester] = course_codes
+    
+    def get_study_plan(self, student_id: str, semester: str = None) -> Dict:
+        """Get student's study plan for a specific or all semesters"""
+        if student_id not in self.student_plans:
+            return {}
+        
+        if semester:
+            return {semester: self.student_plans[student_id].get(semester, [])}
+        
+        return self.student_plans[student_id]
+    
+    def add_course_to_plan(self, student_id: str, semester: str, course_code: str):
+        """Add a course to student's semester plan"""
+        if student_id not in self.student_plans:
+            self.student_plans[student_id] = {}
+        
+        if semester not in self.student_plans[student_id]:
+            self.student_plans[student_id][semester] = []
+        
+        if course_code not in self.student_plans[student_id][semester]:
+            self.student_plans[student_id][semester].append(course_code)
+    
+    def remove_course_from_plan(self, student_id: str, semester: str, course_code: str):
+        """Remove a course from student's semester plan"""
+        if (student_id in self.student_plans and 
+            semester in self.student_plans[student_id] and 
+            course_code in self.student_plans[student_id][semester]):
+            
+            self.student_plans[student_id][semester].remove(course_code)
+
+
+equipment_management.py
+
+from datetime import datetime
+from typing import List, Dict, Optional
+
+
+# ---------------------------------------------------------
+# Equipment Management
+# ---------------------------------------------------------
+
+class Equipment:
+    def __init__(self, equipment_id: str, name: str, category: str):
+        self.equipment_id = equipment_id
+        self.name = name
+        self.category = category
+        self.is_allocated = False
+        self.allocated_to = None
+        self.allocation_date = None
+
+    def allocate(self, allocated_to: str):
+        if self.is_allocated:
+            raise Exception(f"Equipment '{self.name}' is already allocated.")
+        self.is_allocated = True
+        self.allocated_to = allocated_to
+        self.allocation_date = datetime.now()
+
+    def release(self):
+        self.is_allocated = False
+        self.allocated_to = None
+        self.allocation_date = None
+
+
+class EquipmentManager:
+    def __init__(self):
+        self.equipment_list: Dict[str, Equipment] = {}
+
+    def add_equipment(self, equipment: Equipment):
+        self.equipment_list[equipment.equipment_id] = equipment
+
+    def allocate_equipment(self, equipment_id: str, assigned_to: str):
+        equipment = self.equipment_list.get(equipment_id)
+        if not equipment:
+            raise Exception("Equipment not found.")
+        equipment.allocate(assigned_to)
+
+    def release_equipment(self, equipment_id: str):
+        equipment = self.equipment_list.get(equipment_id)
+        if not equipment:
+            raise Exception("Equipment not found.")
+        equipment.release()
+
+    def track_equipment(self):
+        return [
+            {
+                "id": eq.equipment_id,
+                "name": eq.name,
+                "category": eq.category,
+                "allocated": eq.is_allocated,
+                "allocated_to": eq.allocated_to,
+                "allocation_date": eq.allocation_date
+            }
+            for eq in self.equipment_list.values()
+        ]
+
+
+# ---------------------------------------------------------
+# Software License Tracking
+# ---------------------------------------------------------
+
+class SoftwareLicense:
+    def __init__(self, license_id: str, name: str, total_seats: int):
+        self.license_id = license_id
+        self.name = name
+        self.total_seats = total_seats
+        self.used_seats = 0
+
+    def allocate_seat(self):
+        if self.used_seats >= self.total_seats:
+            raise Exception("No available license seats.")
+        self.used_seats += 1
+
+    def release_seat(self):
+        if self.used_seats > 0:
+            self.used_seats -= 1
+
+
+class LicenseManager:
+    def __init__(self):
+        self.licenses: Dict[str, SoftwareLicense] = {}
+
+    def add_license(self, license: SoftwareLicense):
+        self.licenses[license.license_id] = license
+
+    def allocate(self, license_id: str):
+        license_obj = self.licenses.get(license_id)
+        if not license_obj:
+            raise Exception("License not found.")
+        license_obj.allocate_seat()
+
+    def release(self, license_id: str):
+        license_obj = self.licenses.get(license_id)
+        if not license_obj:
+            raise Exception("License not found.")
+        license_obj.release_seat()
+
+    def track_licenses(self):
+        return {
+            lid: {
+                "name": lic.name,
+                "used_seats": lic.used_seats,
+                "total_seats": lic.total_seats
+            }
+            for lid, lic in self.licenses.items()
+        }
+
+
+# ---------------------------------------------------------
+# Professors and Student Allocation
+# ---------------------------------------------------------
+
+class PersonAllocationManager:
+    def __init__(self):
+        self.professor_departments: Dict[str, str] = {}
+        self.student_allocations: Dict[str, str] = {}
+
+    def assign_professor(self, professor_id: str, department: str):
+        self.professor_departments[professor_id] = department
+
+    def move_professor(self, professor_id: str, new_department: str):
+        if professor_id not in self.professor_departments:
+            raise Exception("Professor not found.")
+        self.professor_departments[professor_id] = new_department
+
+    def assign_student(self, student_id: str, department: str):
+        self.student_allocations[student_id] = department
+
+    def track_people(self):
+        return {
+            "professors": self.professor_departments,
+            "students": self.student_allocations
+        }
+
+
+# ---------------------------------------------------------
+# Laboratory Equipment Tracking & Allocation
+# ---------------------------------------------------------
+
+class LaboratoryEquipmentManager:
+    def __init__(self):
+        self.lab_equipment: Dict[str, Equipment] = {}
+
+    def add_lab_equipment(self, equipment: Equipment):
+        self.lab_equipment[equipment.equipment_id] = equipment
+
+    def allocate_lab_equipment(self, equipment_id: str, allocated_to: str):
+        if equipment_id not in self.lab_equipment:
+            raise Exception("Lab equipment not found.")
+        self.lab_equipment[equipment_id].allocate(allocated_to)
+
+    def release_lab_equipment(self, equipment_id: str):
+        if equipment_id not in self.lab_equipment:
+            raise Exception("Lab equipment not found.")
+        self.lab_equipment[equipment_id].release()
+
+    def track_lab_equipment(self):
+        return [
+            {
+                "id": eq.equipment_id,
+                "name": eq.name,
+                "category": eq.category,
+                "allocated": eq.is_allocated,
+                "allocated_to": eq.allocated_to
+            }
+            for eq in self.lab_equipment.values()
+        ]
+
+
+GUI.py
+
+import tkinter as tk
+from tkinter import ttk, messagebox, scrolledtext
+from datetime import datetime, timedelta
+import os
+
+# Import all the modules
+from Classroom_Manager import Scheduler, Classroom, Reservation
+from equipment_management import (
+    EquipmentManager, Equipment, 
+    LicenseManager, SoftwareLicense, 
+    PersonAllocationManager, LaboratoryEquipmentManager
+)
+from Student_Manager import StudentManager
+from Curriculum_Manager import CurriculumManager, Course, StudentPlanner
+from LMS_Manager import LMSManager, LMSContent, Assignment, Quiz, ContentType, AssignmentType, Gradebook, Feedback
+
+class UniversityManagementGUI:
+    def __init__(self, root):
+        self.root = root
+        self.root.title("University Management System")
+        self.root.geometry("1300x800")  # Increased width for more tabs
+        
+        # Initialize managers
+        self.setup_managers()
+        
+        # Create notebook (tabbed interface)
+        self.notebook = ttk.Notebook(root)
+        self.notebook.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+        
+        # Create tabs
+        self.create_classroom_tab()
+        self.create_equipment_tab()
+        self.create_license_tab()
+        self.create_lab_equipment_tab()
+        self.create_student_tab()
+        self.create_people_tab()
+        self.create_curriculum_tab()      # NEW: Curriculum tab
+        self.create_lms_tab()            # NEW: LMS tab
+        self.create_student_portal_tab() # NEW: Student Portal tab
+        self.create_dashboard_tab()
+        
+    def setup_managers(self):
+        """Initialize all management systems"""
+        self.scheduler = Scheduler()
+        self.eq_manager = EquipmentManager()
+        self.license_manager = LicenseManager()
+        self.person_manager = PersonAllocationManager()
+        self.lab_eq_manager = LaboratoryEquipmentManager()
+        self.student_manager = StudentManager()
+        self.curriculum_manager = CurriculumManager()  # NEW
+        self.student_planner = StudentPlanner()        # NEW
+        self.lms_manager = LMSManager()               # NEW
+        
+        # Add some sample data
+        self.add_sample_data()
+    
+    def add_sample_data(self):
+        """Add sample data for demonstration"""
+        # Sample classrooms
+        self.scheduler.add_classroom(Classroom(id="R101", capacity=30, location="West Wing"))
+        self.scheduler.add_classroom(Classroom(id="R102", capacity=50, location="East Wing"))
+        self.scheduler.add_classroom(Classroom(id="R201", capacity=25, location="North Wing"))
+        
+        # Sample equipment
+        self.eq_manager.add_equipment(Equipment("E001", "Projector", "AV"))
+        self.eq_manager.add_equipment(Equipment("E002", "Whiteboard", "Stationery"))
+        self.eq_manager.add_equipment(Equipment("E003", "Sound System", "AV"))
+        
+        # Sample lab equipment
+        self.lab_eq_manager.add_lab_equipment(Equipment("L001", "Microscope", "Biology"))
+        self.lab_eq_manager.add_lab_equipment(Equipment("L002", "Centrifuge", "Chemistry"))
+        
+        # Sample licenses
+        self.license_manager.add_license(SoftwareLicense("S001", "DesignSuite", 10))
+        self.license_manager.add_license(SoftwareLicense("S002", "ProgrammingIDE", 5))
+        
+        # Sample people
+        self.person_manager.assign_professor("P001", "Computer Engineering")
+        self.person_manager.assign_professor("P002", "Mechanical Engineering")
+        self.person_manager.assign_student("S001", "Computer Engineering")
+        
+        # Sample student
+        self.student_manager.add_student({
+            "student_id": "007", 
+            "first_name": "James", 
+            "last_name": "Bond", 
+            "department": "Spy School", 
+            "enrollment_year": 2021
+        })
+        
+        # NEW: Sample curriculum data
+        sample_courses = [
+            Course("CS101", "Introduction to Programming", 3, "Computer Engineering", 
+                  "Basic programming concepts with Python", ["None"]),
+            Course("CS201", "Data Structures", 4, "Computer Engineering", 
+                  "Advanced data structures and algorithms", ["CS101"]),
+            Course("ME101", "Engineering Mechanics", 3, "Mechanical Engineering",
+                  "Basic mechanics principles and applications"),
+            Course("EE201", "Circuit Analysis", 4, "Electrical Engineering",
+                  "Analysis of electrical circuits and systems")
+        ]
+        
+        for course in sample_courses:
+            try:
+                course.is_core = True  # Mark as core courses
+                self.curriculum_manager.add_course(course)
+            except:
+                pass  # Course might already exist
+        
+        # NEW: Sample student enrollments
+        self.curriculum_manager.enroll_student("CS101", "007")
+        self.curriculum_manager.enroll_student("CS201", "007")
+        
+        # NEW: Sample LMS content
+        content = LMSContent(
+            "CONT_001",
+            "CS101",
+            "Introduction to Python",
+            ContentType.VIDEO,
+            "https://example.com/python-intro",
+            "Basic Python programming tutorial"
+        )
+        self.lms_manager.add_content(content)
+        
+        # NEW: Sample assignment
+        assignment = Assignment(
+            "ASSIGN_001",
+            "CS101",
+            "Python Basics Assignment",
+            "Complete the following Python exercises",
+            "2024-12-15",
+            100,
+            AssignmentType.HOMEWORK
+        )
+        self.lms_manager.create_assignment(assignment)
+        
+        # NEW: Sample quiz
+        quiz = Quiz(
+            "QUIZ_001",
+            "CS101",
+            "Python Fundamentals Quiz",
+            [
+                {"question": "What is Python?", "options": ["A snake", "A programming language", "A type of food", "A car"], "correct_answer": 1},
+                {"question": "What symbol is used for comments?", "options": ["//", "#", "/*", "<!--"], "correct_answer": 1},
+                {"question": "Which is a Python data type?", "options": ["int", "string", "list", "All of the above"], "correct_answer": 3}
+            ]
+        )
+        self.lms_manager.create_quiz(quiz)
+
+    def create_classroom_tab(self):
+        """Create classroom management tab"""
+        frame = ttk.Frame(self.notebook)
+        self.notebook.add(frame, text="Classrooms")
+        
+        # Left panel - Inputs
+        input_frame = ttk.LabelFrame(frame, text="Classroom Operations", padding=10)
+        input_frame.pack(side=tk.LEFT, fill=tk.Y, padx=5, pady=5)
+        
+        # Add Classroom
+        ttk.Label(input_frame, text="Classroom ID:").grid(row=0, column=0, sticky=tk.W, pady=2)
+        self.classroom_id = ttk.Entry(input_frame)
+        self.classroom_id.grid(row=0, column=1, pady=2)
+        
+        ttk.Label(input_frame, text="Capacity:").grid(row=1, column=0, sticky=tk.W, pady=2)
+        self.capacity = ttk.Entry(input_frame)
+        self.capacity.grid(row=1, column=1, pady=2)
+        
+        ttk.Label(input_frame, text="Location:").grid(row=2, column=0, sticky=tk.W, pady=2)
+        self.location = ttk.Entry(input_frame)
+        self.location.grid(row=2, column=1, pady=2)
+        
+        ttk.Button(input_frame, text="Add Classroom", 
+                  command=self.add_classroom).grid(row=3, column=0, columnspan=2, pady=5)
+        
+        # Maintenance
+        ttk.Separator(input_frame, orient=tk.HORIZONTAL).grid(row=4, column=0, columnspan=2, sticky=tk.EW, pady=10)
+        
+        ttk.Label(input_frame, text="Maintenance:").grid(row=5, column=0, sticky=tk.W, pady=2)
+        self.maintenance_room = ttk.Combobox(input_frame, values=self.get_classroom_ids())
+        self.maintenance_room.grid(row=5, column=1, pady=2)
+        
+        ttk.Label(input_frame, text="Description:").grid(row=6, column=0, sticky=tk.W, pady=2)
+        self.maintenance_desc = ttk.Entry(input_frame)
+        self.maintenance_desc.grid(row=6, column=1, pady=2)
+        
+        ttk.Button(input_frame, text="Report Maintenance", 
+                  command=self.report_maintenance).grid(row=7, column=0, pady=2)
+        ttk.Button(input_frame, text="Resolve Maintenance", 
+                  command=self.resolve_maintenance).grid(row=7, column=1, pady=2)
+        
+        # Reservation
+        ttk.Separator(input_frame, orient=tk.HORIZONTAL).grid(row=8, column=0, columnspan=2, sticky=tk.EW, pady=10)
+        
+        ttk.Label(input_frame, text="Reservation:").grid(row=9, column=0, sticky=tk.W, pady=2)
+        self.reserve_room = ttk.Combobox(input_frame, values=self.get_classroom_ids())
+        self.reserve_room.grid(row=9, column=1, pady=2)
+        
+        ttk.Label(input_frame, text="Reserved By:").grid(row=10, column=0, sticky=tk.W, pady=2)
+        self.reserved_by = ttk.Entry(input_frame)
+        self.reserved_by.grid(row=10, column=1, pady=2)
+        
+        ttk.Button(input_frame, text="Make Reservation", 
+                  command=self.make_reservation).grid(row=11, column=0, columnspan=2, pady=5)
+        
+        # Right panel - Display
+        display_frame = ttk.LabelFrame(frame, text="Classroom Information", padding=10)
+        display_frame.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True, padx=5, pady=5)
+        
+        self.classroom_display = scrolledtext.ScrolledText(display_frame, height=20, width=60)
+        self.classroom_display.pack(fill=tk.BOTH, expand=True)
+        
+        ttk.Button(display_frame, text="Refresh Classroom Info", 
+                  command=self.refresh_classroom_info).pack(pady=5)
+        
+        self.refresh_classroom_info()
+    
+    def create_equipment_tab(self):
+        """Create equipment management tab"""
+        frame = ttk.Frame(self.notebook)
+        self.notebook.add(frame, text="Equipment")
+        
+        # Left panel - Inputs
+        input_frame = ttk.LabelFrame(frame, text="Equipment Operations", padding=10)
+        input_frame.pack(side=tk.LEFT, fill=tk.Y, padx=5, pady=5)
+        
+        # Add Equipment
+        ttk.Label(input_frame, text="Equipment ID:").grid(row=0, column=0, sticky=tk.W, pady=2)
+        self.eq_id = ttk.Entry(input_frame)
+        self.eq_id.grid(row=0, column=1, pady=2)
+        
+        ttk.Label(input_frame, text="Name:").grid(row=1, column=0, sticky=tk.W, pady=2)
+        self.eq_name = ttk.Entry(input_frame)
+        self.eq_name.grid(row=1, column=1, pady=2)
+        
+        ttk.Label(input_frame, text="Category:").grid(row=2, column=0, sticky=tk.W, pady=2)
+        self.eq_category = ttk.Entry(input_frame)
+        self.eq_category.grid(row=2, column=1, pady=2)
+        
+        ttk.Button(input_frame, text="Add Equipment", 
+                  command=self.add_equipment).grid(row=3, column=0, columnspan=2, pady=5)
+        
+        # Allocate/Release
+        ttk.Separator(input_frame, orient=tk.HORIZONTAL).grid(row=4, column=0, columnspan=2, sticky=tk.EW, pady=10)
+        
+        ttk.Label(input_frame, text="Equipment ID:").grid(row=5, column=0, sticky=tk.W, pady=2)
+        self.alloc_eq_id = ttk.Combobox(input_frame, values=self.get_equipment_ids())
+        self.alloc_eq_id.grid(row=5, column=1, pady=2)
+        
+        ttk.Label(input_frame, text="Allocate To:").grid(row=6, column=0, sticky=tk.W, pady=2)
+        self.alloc_to = ttk.Entry(input_frame)
+        self.alloc_to.grid(row=6, column=1, pady=2)
+        
+        ttk.Button(input_frame, text="Allocate Equipment", 
+                  command=self.allocate_equipment).grid(row=7, column=0, pady=2)
+        ttk.Button(input_frame, text="Release Equipment", 
+                  command=self.release_equipment).grid(row=7, column=1, pady=2)
+        
+        # Right panel - Display
+        display_frame = ttk.LabelFrame(frame, text="Equipment Status", padding=10)
+        display_frame.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True, padx=5, pady=5)
+        
+        self.equipment_display = scrolledtext.ScrolledText(display_frame, height=20, width=60)
+        self.equipment_display.pack(fill=tk.BOTH, expand=True)
+        
+        ttk.Button(display_frame, text="Refresh Equipment Info", 
+                  command=self.refresh_equipment_info).pack(pady=5)
+        
+        self.refresh_equipment_info()
+    
+    def create_license_tab(self):
+        """Create software license management tab"""
+        frame = ttk.Frame(self.notebook)
+        self.notebook.add(frame, text="Licenses")
+        
+        # Left panel - Inputs
+        input_frame = ttk.LabelFrame(frame, text="License Operations", padding=10)
+        input_frame.pack(side=tk.LEFT, fill=tk.Y, padx=5, pady=5)
+        
+        # Add License
+        ttk.Label(input_frame, text="License ID:").grid(row=0, column=0, sticky=tk.W, pady=2)
+        self.license_id = ttk.Entry(input_frame)
+        self.license_id.grid(row=0, column=1, pady=2)
+        
+        ttk.Label(input_frame, text="Software Name:").grid(row=1, column=0, sticky=tk.W, pady=2)
+        self.software_name = ttk.Entry(input_frame)
+        self.software_name.grid(row=1, column=1, pady=2)
+        
+        ttk.Label(input_frame, text="Total Seats:").grid(row=2, column=0, sticky=tk.W, pady=2)
+        self.total_seats = ttk.Entry(input_frame)
+        self.total_seats.grid(row=2, column=1, pady=2)
+        
+        ttk.Button(input_frame, text="Add License", 
+                  command=self.add_license).grid(row=3, column=0, columnspan=2, pady=5)
+        
+        # Allocate/Release
+        ttk.Separator(input_frame, orient=tk.HORIZONTAL).grid(row=4, column=0, columnspan=2, sticky=tk.EW, pady=10)
+        
+        ttk.Label(input_frame, text="License ID:").grid(row=5, column=0, sticky=tk.W, pady=2)
+        self.alloc_license_id = ttk.Combobox(input_frame, values=self.get_license_ids())
+        self.alloc_license_id.grid(row=5, column=1, pady=2)
+        
+        ttk.Button(input_frame, text="Allocate Seat", 
+                  command=self.allocate_license).grid(row=6, column=0, pady=2)
+        ttk.Button(input_frame, text="Release Seat", 
+                  command=self.release_license).grid(row=6, column=1, pady=2)
+        
+        # Right panel - Display
+        display_frame = ttk.LabelFrame(frame, text="License Status", padding=10)
+        display_frame.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True, padx=5, pady=5)
+        
+        self.license_display = scrolledtext.ScrolledText(display_frame, height=20, width=60)
+        self.license_display.pack(fill=tk.BOTH, expand=True)
+        
+        ttk.Button(display_frame, text="Refresh License Info", 
+                  command=self.refresh_license_info).pack(pady=5)
+        
+        self.refresh_license_info()
+    
+    def create_lab_equipment_tab(self):
+        """Create lab equipment management tab"""
+        frame = ttk.Frame(self.notebook)
+        self.notebook.add(frame, text="Lab Equipment")
+        
+        # Left panel - Inputs
+        input_frame = ttk.LabelFrame(frame, text="Lab Equipment Operations", padding=10)
+        input_frame.pack(side=tk.LEFT, fill=tk.Y, padx=5, pady=5)
+        
+        # Add Lab Equipment
+        ttk.Label(input_frame, text="Equipment ID:").grid(row=0, column=0, sticky=tk.W, pady=2)
+        self.lab_eq_id = ttk.Entry(input_frame)
+        self.lab_eq_id.grid(row=0, column=1, pady=2)
+        
+        ttk.Label(input_frame, text="Name:").grid(row=1, column=0, sticky=tk.W, pady=2)
+        self.lab_eq_name = ttk.Entry(input_frame)
+        self.lab_eq_name.grid(row=1, column=1, pady=2)
+        
+        ttk.Label(input_frame, text="Category:").grid(row=2, column=0, sticky=tk.W, pady=2)
+        self.lab_eq_category = ttk.Entry(input_frame)
+        self.lab_eq_category.grid(row=2, column=1, pady=2)
+        
+        ttk.Button(input_frame, text="Add Lab Equipment", 
+                  command=self.add_lab_equipment).grid(row=3, column=0, columnspan=2, pady=5)
+        
+        # Allocate/Release
+        ttk.Separator(input_frame, orient=tk.HORIZONTAL).grid(row=4, column=0, columnspan=2, sticky=tk.EW, pady=10)
+        
+        ttk.Label(input_frame, text="Equipment ID:").grid(row=5, column=0, sticky=tk.W, pady=2)
+        self.alloc_lab_eq_id = ttk.Combobox(input_frame, values=self.get_lab_equipment_ids())
+        self.alloc_lab_eq_id.grid(row=5, column=1, pady=2)
+        
+        ttk.Label(input_frame, text="Allocate To:").grid(row=6, column=0, sticky=tk.W, pady=2)
+        self.alloc_lab_to = ttk.Entry(input_frame)
+        self.alloc_lab_to.grid(row=6, column=1, pady=2)
+        
+        ttk.Button(input_frame, text="Allocate Lab Equipment", 
+                  command=self.allocate_lab_equipment).grid(row=7, column=0, pady=2)
+        ttk.Button(input_frame, text="Release Lab Equipment", 
+                  command=self.release_lab_equipment).grid(row=7, column=1, pady=2)
+        
+        # Right panel - Display
+        display_frame = ttk.LabelFrame(frame, text="Lab Equipment Status", padding=10)
+        display_frame.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True, padx=5, pady=5)
+        
+        self.lab_equipment_display = scrolledtext.ScrolledText(display_frame, height=20, width=60)
+        self.lab_equipment_display.pack(fill=tk.BOTH, expand=True)
+        
+        ttk.Button(display_frame, text="Refresh Lab Equipment Info", 
+                  command=self.refresh_lab_equipment_info).pack(pady=5)
+        
+        self.refresh_lab_equipment_info()
+    
+    def create_student_tab(self):
+        """Create student management tab"""
+        frame = ttk.Frame(self.notebook)
+        self.notebook.add(frame, text="Students")
+        
+        # Left panel - Inputs
+        input_frame = ttk.LabelFrame(frame, text="Student Operations", padding=10)
+        input_frame.pack(side=tk.LEFT, fill=tk.Y, padx=5, pady=5)
+        
+        # Add Student
+        ttk.Label(input_frame, text="Student ID:").grid(row=0, column=0, sticky=tk.W, pady=2)
+        self.student_id = ttk.Entry(input_frame)
+        self.student_id.grid(row=0, column=1, pady=2)
+        
+        ttk.Label(input_frame, text="First Name:").grid(row=1, column=0, sticky=tk.W, pady=2)
+        self.first_name = ttk.Entry(input_frame)
+        self.first_name.grid(row=1, column=1, pady=2)
+        
+        ttk.Label(input_frame, text="Last Name:").grid(row=2, column=0, sticky=tk.W, pady=2)
+        self.last_name = ttk.Entry(input_frame)
+        self.last_name.grid(row=2, column=1, pady=2)
+        
+        ttk.Label(input_frame, text="Department:").grid(row=3, column=0, sticky=tk.W, pady=2)
+        self.department = ttk.Entry(input_frame)
+        self.department.grid(row=3, column=1, pady=2)
+        
+        ttk.Label(input_frame, text="Enrollment Year:").grid(row=4, column=0, sticky=tk.W, pady=2)
+        self.enrollment_year = ttk.Entry(input_frame)
+        self.enrollment_year.grid(row=4, column=1, pady=2)
+        
+        ttk.Button(input_frame, text="Add Student", 
+                  command=self.add_student).grid(row=5, column=0, columnspan=2, pady=5)
+        
+        # Student Operations
+        ttk.Separator(input_frame, orient=tk.HORIZONTAL).grid(row=6, column=0, columnspan=2, sticky=tk.EW, pady=10)
+        
+        ttk.Label(input_frame, text="Student ID:").grid(row=7, column=0, sticky=tk.W, pady=2)
+        self.operation_student_id = ttk.Combobox(input_frame, values=self.get_student_ids())
+        self.operation_student_id.grid(row=7, column=1, pady=2)
+        
+        ttk.Button(input_frame, text="Get Student", 
+                  command=self.get_student).grid(row=8, column=0, pady=2)
+        ttk.Button(input_frame, text="Delete Student", 
+                  command=self.delete_student).grid(row=8, column=1, pady=2)
+        
+        # Right panel - Display
+        display_frame = ttk.LabelFrame(frame, text="Student Information", padding=10)
+        display_frame.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True, padx=5, pady=5)
+        
+        self.student_display = scrolledtext.ScrolledText(display_frame, height=20, width=60)
+        self.student_display.pack(fill=tk.BOTH, expand=True)
+        
+        ttk.Button(display_frame, text="List All Students", 
+                  command=self.list_students).pack(pady=5)
+        
+        self.list_students()
+    
+    def create_people_tab(self):
+        """Create people allocation management tab"""
+        frame = ttk.Frame(self.notebook)
+        self.notebook.add(frame, text="People Allocation")
+        
+        # Left panel - Inputs
+        input_frame = ttk.LabelFrame(frame, text="People Operations", padding=10)
+        input_frame.pack(side=tk.LEFT, fill=tk.Y, padx=5, pady=5)
+        
+        # Professor Operations
+        ttk.Label(input_frame, text="Professor ID:").grid(row=0, column=0, sticky=tk.W, pady=2)
+        self.professor_id = ttk.Entry(input_frame)
+        self.professor_id.grid(row=0, column=1, pady=2)
+        
+        ttk.Label(input_frame, text="Department:").grid(row=1, column=0, sticky=tk.W, pady=2)
+        self.prof_dept = ttk.Entry(input_frame)
+        self.prof_dept.grid(row=1, column=1, pady=2)
+        
+        ttk.Button(input_frame, text="Assign Professor", 
+                  command=self.assign_professor).grid(row=2, column=0, columnspan=2, pady=5)
+        
+        # Student Allocation
+        ttk.Separator(input_frame, orient=tk.HORIZONTAL).grid(row=3, column=0, columnspan=2, sticky=tk.EW, pady=10)
+        
+        ttk.Label(input_frame, text="Student ID:").grid(row=4, column=0, sticky=tk.W, pady=2)
+        self.alloc_student_id = ttk.Entry(input_frame)
+        self.alloc_student_id.grid(row=4, column=1, pady=2)
+        
+        ttk.Label(input_frame, text="Department:").grid(row=5, column=0, sticky=tk.W, pady=2)
+        self.student_dept = ttk.Entry(input_frame)
+        self.student_dept.grid(row=5, column=1, pady=2)
+        
+        ttk.Button(input_frame, text="Assign Student", 
+                  command=self.assign_student).grid(row=6, column=0, columnspan=2, pady=5)
+        
+        # Right panel - Display
+        display_frame = ttk.LabelFrame(frame, text="People Allocation", padding=10)
+        display_frame.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True, padx=5, pady=5)
+        
+        self.people_display = scrolledtext.ScrolledText(display_frame, height=20, width=60)
+        self.people_display.pack(fill=tk.BOTH, expand=True)
+        
+        ttk.Button(display_frame, text="Refresh People Info", 
+                  command=self.refresh_people_info).pack(pady=5)
+        
+        self.refresh_people_info()
+    
+    def create_curriculum_tab(self):
+        """Create curriculum and course catalogue management tab"""
+        frame = ttk.Frame(self.notebook)
+        self.notebook.add(frame, text="Curriculum")
+        
+        # Notebook within tab for organization
+        curriculum_notebook = ttk.Notebook(frame)
+        curriculum_notebook.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+        
+        # Sub-tab 1: Course Catalogue
+        catalogue_frame = ttk.Frame(curriculum_notebook)
+        curriculum_notebook.add(catalogue_frame, text="Course Catalogue")
+        
+        # Left panel - Course Management
+        input_frame = ttk.LabelFrame(catalogue_frame, text="Course Management", padding=10)
+        input_frame.pack(side=tk.LEFT, fill=tk.Y, padx=5, pady=5)
+        
+        # Course form
+        ttk.Label(input_frame, text="Course Code:").grid(row=0, column=0, sticky=tk.W, pady=2)
+        self.course_code = ttk.Entry(input_frame)
+        self.course_code.grid(row=0, column=1, pady=2)
+        
+        ttk.Label(input_frame, text="Course Name:").grid(row=1, column=0, sticky=tk.W, pady=2)
+        self.course_name = ttk.Entry(input_frame)
+        self.course_name.grid(row=1, column=1, pady=2)
+        
+        ttk.Label(input_frame, text="Credits:").grid(row=2, column=0, sticky=tk.W, pady=2)
+        self.course_credits = ttk.Entry(input_frame)
+        self.course_credits.grid(row=2, column=1, pady=2)
+        
+        ttk.Label(input_frame, text="Department:").grid(row=3, column=0, sticky=tk.W, pady=2)
+        self.course_dept = ttk.Combobox(input_frame, values=self.curriculum_manager.departments)
+        self.course_dept.grid(row=3, column=1, pady=2)
+        
+        ttk.Label(input_frame, text="Description:").grid(row=4, column=0, sticky=tk.W, pady=2)
+        self.course_desc = tk.Text(input_frame, height=3, width=30)
+        self.course_desc.grid(row=4, column=1, pady=2)
+        
+        self.course_is_core = tk.BooleanVar()
+        ttk.Checkbutton(input_frame, text="Core Course", variable=self.course_is_core).grid(row=5, column=0, columnspan=2, pady=2)
+        
+        # Buttons
+        btn_frame = ttk.Frame(input_frame)
+        btn_frame.grid(row=6, column=0, columnspan=2, pady=10)
+        
+        ttk.Button(btn_frame, text="Add Course", command=self.add_course).pack(side=tk.LEFT, padx=5)
+        ttk.Button(btn_frame, text="Update Course", command=self.update_course).pack(side=tk.LEFT, padx=5)
+        ttk.Button(btn_frame, text="Delete Course", command=self.delete_course).pack(side=tk.LEFT, padx=5)
+        
+        # Right panel - Course List
+        display_frame = ttk.LabelFrame(catalogue_frame, text="Course List", padding=10)
+        display_frame.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True, padx=5, pady=5)
+        
+        # Treeview for courses
+        columns = ("Code", "Name", "Credits", "Department", "Core", "Enrolled")
+        self.course_tree = ttk.Treeview(display_frame, columns=columns, show="headings", height=15)
+        
+        for col in columns:
+            self.course_tree.heading(col, text=col)
+            self.course_tree.column(col, width=100)
+        
+        scrollbar = ttk.Scrollbar(display_frame, orient=tk.VERTICAL, command=self.course_tree.yview)
+        self.course_tree.configure(yscroll=scrollbar.set)
+        
+        self.course_tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        
+        ttk.Button(display_frame, text="Refresh Courses", command=self.refresh_courses).pack(pady=5)
+        
+        # Sub-tab 2: Student Planning
+        planning_frame = ttk.Frame(curriculum_notebook)
+        curriculum_notebook.add(planning_frame, text="Study Planning")
+        
+        # Student planning interface
+        planning_input = ttk.LabelFrame(planning_frame, text="Study Plan", padding=10)
+        planning_input.pack(fill=tk.X, padx=10, pady=5)
+        
+        ttk.Label(planning_input, text="Student ID:").grid(row=0, column=0, sticky=tk.W, pady=2)
+        self.plan_student_id = ttk.Entry(planning_input)
+        self.plan_student_id.grid(row=0, column=1, pady=2)
+        
+        ttk.Label(planning_input, text="Semester:").grid(row=1, column=0, sticky=tk.W, pady=2)
+        self.plan_semester = ttk.Combobox(planning_input, values=["Fall 2024", "Spring 2025", "Summer 2025"])
+        self.plan_semester.grid(row=1, column=1, pady=2)
+        
+        ttk.Label(planning_input, text="Select Course:").grid(row=2, column=0, sticky=tk.W, pady=2)
+        self.plan_course = ttk.Combobox(planning_input)
+        self.plan_course.grid(row=2, column=1, pady=2)
+        
+        ttk.Button(planning_input, text="Add to Plan", command=self.add_to_plan).grid(row=3, column=0, columnspan=2, pady=5)
+        
+        # Display study plan
+        plan_display = ttk.LabelFrame(planning_frame, text="Current Study Plan", padding=10)
+        plan_display.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
+        
+        self.plan_display_text = tk.Text(plan_display, height=15)
+        self.plan_display_text.pack(fill=tk.BOTH, expand=True)
+        
+        self.refresh_courses()
+    
+    def create_lms_tab(self):
+        """Create Learning Management System tab"""
+        frame = ttk.Frame(self.notebook)
+        self.notebook.add(frame, text="LMS")
+        
+        # Notebook for LMS organization
+        lms_notebook = ttk.Notebook(frame)
+        lms_notebook.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+        
+        # Sub-tab 1: Content Management
+        content_frame = ttk.Frame(lms_notebook)
+        lms_notebook.add(content_frame, text="Content")
+        
+        # Content management interface
+        content_input = ttk.LabelFrame(content_frame, text="Add Content", padding=10)
+        content_input.pack(fill=tk.X, padx=10, pady=5)
+        
+        ttk.Label(content_input, text="Course Code:").grid(row=0, column=0, sticky=tk.W, pady=2)
+        self.content_course = ttk.Combobox(content_input)
+        self.content_course.grid(row=0, column=1, pady=2)
+        
+        ttk.Label(content_input, text="Title:").grid(row=1, column=0, sticky=tk.W, pady=2)
+        self.content_title = ttk.Entry(content_input)
+        self.content_title.grid(row=1, column=1, pady=2)
+        
+        ttk.Label(content_input, text="Type:").grid(row=2, column=0, sticky=tk.W, pady=2)
+        self.content_type = ttk.Combobox(content_input, values=[t.value for t in ContentType])
+        self.content_type.grid(row=2, column=1, pady=2)
+        
+        ttk.Label(content_input, text="URL/Path:").grid(row=3, column=0, sticky=tk.W, pady=2)
+        self.content_url = ttk.Entry(content_input)
+        self.content_url.grid(row=3, column=1, pady=2)
+        
+        ttk.Label(content_input, text="Description:").grid(row=4, column=0, sticky=tk.W, pady=2)
+        self.content_desc = tk.Text(content_input, height=2, width=30)
+        self.content_desc.grid(row=4, column=1, pady=2)
+        
+        ttk.Button(content_input, text="Add Content", command=self.add_lms_content).grid(row=5, column=0, columnspan=2, pady=5)
+        
+        # Content display
+        content_display = ttk.LabelFrame(content_frame, text="Course Content", padding=10)
+        content_display.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
+        
+        self.content_list_display = tk.Text(content_display, height=15)
+        self.content_list_display.pack(fill=tk.BOTH, expand=True)
+        
+        ttk.Button(content_display, text="Refresh Content", command=self.refresh_lms_content).pack(pady=5)
+        
+        # Sub-tab 2: Assignments & Quizzes
+        assignments_frame = ttk.Frame(lms_notebook)
+        lms_notebook.add(assignments_frame, text="Assignments & Quizzes")
+        
+        # Assignment creation interface
+        assignment_input = ttk.LabelFrame(assignments_frame, text="Create Assignment", padding=10)
+        assignment_input.pack(fill=tk.X, padx=10, pady=5)
+        
+        ttk.Label(assignment_input, text="Course Code:").grid(row=0, column=0, sticky=tk.W, pady=2)
+        self.assign_course = ttk.Combobox(assignment_input)
+        self.assign_course.grid(row=0, column=1, pady=2)
+        
+        ttk.Label(assignment_input, text="Title:").grid(row=1, column=0, sticky=tk.W, pady=2)
+        self.assign_title = ttk.Entry(assignment_input)
+        self.assign_title.grid(row=1, column=1, pady=2)
+        
+        ttk.Label(assignment_input, text="Max Points:").grid(row=2, column=0, sticky=tk.W, pady=2)
+        self.assign_points = ttk.Entry(assignment_input)
+        self.assign_points.grid(row=2, column=1, pady=2)
+        
+        ttk.Label(assignment_input, text="Due Date:").grid(row=3, column=0, sticky=tk.W, pady=2)
+        self.assign_due = ttk.Entry(assignment_input)
+        self.assign_due.grid(row=3, column=1, pady=2)
+        self.assign_due.insert(0, "2024-12-15")
+        
+        ttk.Button(assignment_input, text="Create Assignment", command=self.create_assignment).grid(row=4, column=0, columnspan=2, pady=5)
+        
+        # Quiz creation interface
+        quiz_input = ttk.LabelFrame(assignments_frame, text="Create Quiz", padding=10)
+        quiz_input.pack(fill=tk.X, padx=10, pady=5)
+        
+        ttk.Label(quiz_input, text="Course Code:").grid(row=0, column=0, sticky=tk.W, pady=2)
+        self.quiz_course = ttk.Combobox(quiz_input)
+        self.quiz_course.grid(row=0, column=1, pady=2)
+        
+        ttk.Label(quiz_input, text="Quiz Title:").grid(row=1, column=0, sticky=tk.W, pady=2)
+        self.quiz_title = ttk.Entry(quiz_input)
+        self.quiz_title.grid(row=1, column=1, pady=2)
+        
+        ttk.Button(quiz_input, text="Create Sample Quiz", command=self.create_sample_quiz).grid(row=2, column=0, columnspan=2, pady=5)
+        
+        # Display area
+        assignment_display = ttk.LabelFrame(assignments_frame, text="Assignments & Quizzes", padding=10)
+        assignment_display.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
+        
+        self.assignment_display = tk.Text(assignment_display, height=10)
+        self.assignment_display.pack(fill=tk.BOTH, expand=True)
+        
+        self.refresh_courses()  # To populate comboboxes
+    
+    def create_student_portal_tab(self):
+        """Create student portal tab for viewing grades and content"""
+        frame = ttk.Frame(self.notebook)
+        self.notebook.add(frame, text="Student Portal")
+        
+        # Student selection
+        select_frame = ttk.LabelFrame(frame, text="Student Information", padding=10)
+        select_frame.pack(fill=tk.X, padx=10, pady=5)
+        
+        ttk.Label(select_frame, text="Student ID:").grid(row=0, column=0, sticky=tk.W, pady=2)
+        self.portal_student = ttk.Combobox(select_frame, values=self.get_student_ids())
+        self.portal_student.grid(row=0, column=1, pady=2)
+        ttk.Button(select_frame, text="Load Student Data", command=self.load_student_portal).grid(row=0, column=2, padx=5)
+        
+        # Notebook for student views
+        portal_notebook = ttk.Notebook(frame)
+        portal_notebook.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
+        
+        # Grades view
+        grades_frame = ttk.Frame(portal_notebook)
+        portal_notebook.add(grades_frame, text="Grades")
+        
+        self.grades_display = tk.Text(grades_frame, height=20)
+        self.grades_display.pack(fill=tk.BOTH, expand=True)
+        
+        # Course content view
+        content_frame = ttk.Frame(portal_notebook)
+        portal_notebook.add(content_frame, text="Course Content")
+        
+        self.portal_content_display = tk.Text(content_frame, height=20)
+        self.portal_content_display.pack(fill=tk.BOTH, expand=True)
+        
+        # Feedback view
+        feedback_frame = ttk.Frame(portal_notebook)
+        portal_notebook.add(feedback_frame, text="Give Feedback")
+        
+        feedback_input = ttk.LabelFrame(feedback_frame, text="Course Feedback", padding=10)
+        feedback_input.pack(fill=tk.X, padx=10, pady=5)
+        
+        ttk.Label(feedback_input, text="Course Code:").grid(row=0, column=0, sticky=tk.W, pady=2)
+        self.feedback_course = ttk.Combobox(feedback_input)
+        self.feedback_course.grid(row=0, column=1, pady=2)
+        
+        ttk.Label(feedback_input, text="Rating (1-5):").grid(row=1, column=0, sticky=tk.W, pady=2)
+        self.feedback_rating = ttk.Combobox(feedback_input, values=[1, 2, 3, 4, 5])
+        self.feedback_rating.grid(row=1, column=1, pady=2)
+        
+        ttk.Label(feedback_input, text="Feedback:").grid(row=2, column=0, sticky=tk.W, pady=2)
+        self.feedback_text = tk.Text(feedback_input, height=3, width=40)
+        self.feedback_text.grid(row=2, column=1, pady=2)
+        
+        ttk.Button(feedback_input, text="Submit Feedback", command=self.submit_feedback).grid(row=3, column=0, columnspan=2, pady=5)
+        
+        # Display feedback
+        feedback_display = ttk.LabelFrame(feedback_frame, text="Course Ratings", padding=10)
+        feedback_display.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
+        
+        self.feedback_display = tk.Text(feedback_display, height=10)
+        self.feedback_display.pack(fill=tk.BOTH, expand=True)
+        
+        # Update combobox values
+        self.refresh_courses()
+    
+    def create_dashboard_tab(self):
+        """Create dashboard tab with system overview"""
+        frame = ttk.Frame(self.notebook)
+        self.notebook.add(frame, text="Dashboard")
+        
+        # Dashboard content
+        dashboard_frame = ttk.LabelFrame(frame, text="System Overview", padding=20)
+        dashboard_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+        
+        self.dashboard_display = scrolledtext.ScrolledText(dashboard_frame, height=25, width=80)
+        self.dashboard_display.pack(fill=tk.BOTH, expand=True)
+        
+        ttk.Button(dashboard_frame, text="Refresh Dashboard", 
+                  command=self.refresh_dashboard).pack(pady=10)
+        
+        self.refresh_dashboard()
+    
+    # Classroom Methods
+    def get_classroom_ids(self):
+        return [room.id for room in self.scheduler.classrooms]
+    
+    def add_classroom(self):
+        try:
+            room_id = self.classroom_id.get()
+            capacity = int(self.capacity.get())
+            location = self.location.get()
+            
+            self.scheduler.add_classroom(Classroom(id=room_id, capacity=capacity, location=location))
+            messagebox.showinfo("Success", f"Classroom {room_id} added successfully!")
+            self.refresh_classroom_info()
+            # Update combobox values
+            self.maintenance_room['values'] = self.get_classroom_ids()
+            self.reserve_room['values'] = self.get_classroom_ids()
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to add classroom: {str(e)}")
+    
+    def report_maintenance(self):
+        try:
+            room_id = self.maintenance_room.get()
+            description = self.maintenance_desc.get()
+            
+            result = self.scheduler.report_maintenance(room_id, description)
+            messagebox.showinfo("Success", result)
+            self.refresh_classroom_info()
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to report maintenance: {str(e)}")
+    
+    def resolve_maintenance(self):
+        try:
+            room_id = self.maintenance_room.get()
+            result = self.scheduler.resolve_maintenance(room_id)
+            messagebox.showinfo("Success", result)
+            self.refresh_classroom_info()
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to resolve maintenance: {str(e)}")
+    
+    def make_reservation(self):
+        try:
+            room_id = self.reserve_room.get()
+            reserved_by = self.reserved_by.get()
+            # Simple reservation - next available hour
+            start = datetime.now().replace(minute=0, second=0, microsecond=0) + timedelta(hours=1)
+            end = start + timedelta(hours=1)
+            
+            result = self.scheduler.reserve_classroom(room_id, start, end, reserved_by)
+            messagebox.showinfo("Reservation", result)
+            self.refresh_classroom_info()
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to make reservation: {str(e)}")
+    
+    def refresh_classroom_info(self):
+        self.classroom_display.delete(1.0, tk.END)
+        info = "=== CLASSROOMS ===\n\n"
+        for room in self.scheduler.classrooms:
+            info += f"ID: {room.id}\n"
+            info += f"Capacity: {room.capacity}\n"
+            info += f"Location: {room.location}\n"
+            info += f"Maintenance: {'Yes' if room.is_under_maintenance else 'No'}\n"
+            if room.maintenance_notes:
+                info += f"Maintenance Notes: {', '.join(room.maintenance_notes)}\n"
+            
+            # Show reservations for this room
+            room_reservations = [r for r in self.scheduler.reservations if r.classroom_id == room.id]
+            if room_reservations:
+                info += "Reservations:\n"
+                for res in room_reservations:
+                    info += f"  - {res.reserved_by}: {res.start.strftime('%Y-%m-%d %H:%M')} to {res.end.strftime('%H:%M')}\n"
+            info += "\n" + "-"*40 + "\n\n"
+        
+        self.classroom_display.insert(tk.END, info)
+    
+    # Equipment Methods
+    def get_equipment_ids(self):
+        return list(self.eq_manager.equipment_list.keys())
+    
+    def add_equipment(self):
+        try:
+            eq_id = self.eq_id.get()
+            name = self.eq_name.get()
+            category = self.eq_category.get()
+            
+            self.eq_manager.add_equipment(Equipment(eq_id, name, category))
+            messagebox.showinfo("Success", f"Equipment {eq_id} added successfully!")
+            self.refresh_equipment_info()
+            self.alloc_eq_id['values'] = self.get_equipment_ids()
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to add equipment: {str(e)}")
+    
+    def allocate_equipment(self):
+        try:
+            eq_id = self.alloc_eq_id.get()
+            allocated_to = self.alloc_to.get()
+            
+            self.eq_manager.allocate_equipment(eq_id, allocated_to)
+            messagebox.showinfo("Success", f"Equipment {eq_id} allocated to {allocated_to}!")
+            self.refresh_equipment_info()
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to allocate equipment: {str(e)}")
+    
+    def release_equipment(self):
+        try:
+            eq_id = self.alloc_eq_id.get()
+            self.eq_manager.release_equipment(eq_id)
+            messagebox.showinfo("Success", f"Equipment {eq_id} released!")
+            self.refresh_equipment_info()
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to release equipment: {str(e)}")
+    
+    def refresh_equipment_info(self):
+        self.equipment_display.delete(1.0, tk.END)
+        info = "=== EQUIPMENT ===\n\n"
+        for eq in self.eq_manager.track_equipment():
+            info += f"ID: {eq['id']}\n"
+            info += f"Name: {eq['name']}\n"
+            info += f"Category: {eq['category']}\n"
+            info += f"Allocated: {'Yes' if eq['allocated'] else 'No'}\n"
+            if eq['allocated']:
+                info += f"Allocated To: {eq['allocated_to']}\n"
+                info += f"Allocation Date: {eq['allocation_date']}\n"
+            info += "\n" + "-"*40 + "\n\n"
+        
+        self.equipment_display.insert(tk.END, info)
+    
+    # License Methods
+    def get_license_ids(self):
+        return list(self.license_manager.licenses.keys())
+    
+    def add_license(self):
+        try:
+            license_id = self.license_id.get()
+            name = self.software_name.get()
+            total_seats = int(self.total_seats.get())
+            
+            self.license_manager.add_license(SoftwareLicense(license_id, name, total_seats))
+            messagebox.showinfo("Success", f"License {license_id} added successfully!")
+            self.refresh_license_info()
+            self.alloc_license_id['values'] = self.get_license_ids()
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to add license: {str(e)}")
+    
+    def allocate_license(self):
+        try:
+            license_id = self.alloc_license_id.get()
+            self.license_manager.allocate(license_id)
+            messagebox.showinfo("Success", f"License seat allocated for {license_id}!")
+            self.refresh_license_info()
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to allocate license: {str(e)}")
+    
+    def release_license(self):
+        try:
+            license_id = self.alloc_license_id.get()
+            self.license_manager.release(license_id)
+            messagebox.showinfo("Success", f"License seat released for {license_id}!")
+            self.refresh_license_info()
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to relea
+
+LMS_manager.py
+
+# LMS_Manager.py
+import os
+import json
+from datetime import datetime
+from typing import List, Dict, Optional
+from enum import Enum
+
+class ContentType(Enum):
+    VIDEO = "video"
+    DOCUMENT = "document"
+    LINK = "link"
+    PRESENTATION = "presentation"
+    AUDIO = "audio"
+
+class AssignmentType(Enum):
+    HOMEWORK = "homework"
+    PROJECT = "project"
+    LAB = "lab"
+    ESSAY = "essay"
+
+class LMSContent:
+    def __init__(self, content_id: str, course_code: str, title: str, 
+                 content_type: ContentType, url_or_path: str, description: str = ""):
+        self.content_id = content_id
+        self.course_code = course_code
+        self.title = title
+        self.content_type = content_type
+        self.url_or_path = url_or_path
+        self.description = description
+        self.created_date = datetime.now().isoformat()
+        self.views = 0
+        self.views_by = []  # student_ids who viewed
+    
+    def to_dict(self):
+        return {
+            "content_id": self.content_id,
+            "course_code": self.course_code,
+            "title": self.title,
+            "content_type": self.content_type.value,
+            "url_or_path": self.url_or_path,
+            "description": self.description,
+            "created_date": self.created_date,
+            "views": self.views,
+            "views_by": self.views_by
+        }
+    
+    @classmethod
+    def from_dict(cls, data: dict):
+        content = cls(
+            data["content_id"],
+            data["course_code"],
+            data["title"],
+            ContentType(data["content_type"]),
+            data["url_or_path"],
+            data.get("description", "")
+        )
+        content.created_date = data.get("created_date", datetime.now().isoformat())
+        content.views = data.get("views", 0)
+        content.views_by = data.get("views_by", [])
+        return content
+
+
+class Assignment:
+    def __init__(self, assignment_id: str, course_code: str, title: str, 
+                 description: str, due_date: str, max_points: float,
+                 assignment_type: AssignmentType = AssignmentType.HOMEWORK):
+        self.assignment_id = assignment_id
+        self.course_code = course_code
+        self.title = title
+        self.description = description
+        self.due_date = due_date
+        self.max_points = max_points
+        self.assignment_type = assignment_type
+        self.submissions = {}  # student_id -> {"submission": text, "submitted_date": date, "grade": None}
+        self.created_date = datetime.now().isoformat()
+    
+    def submit_assignment(self, student_id: str, submission_text: str):
+        """Student submits an assignment"""
+        self.submissions[student_id] = {
+            "submission": submission_text,
+            "submitted_date": datetime.now().isoformat(),
+            "grade": None,
+            "feedback": ""
+        }
+    
+    def grade_assignment(self, student_id: str, grade: float, feedback: str = ""):
+        """Professor grades an assignment"""
+        if student_id in self.submissions:
+            self.submissions[student_id]["grade"] = grade
+            self.submissions[student_id]["feedback"] = feedback
+        else:
+            raise ValueError(f"No submission found for student {student_id}")
+    
+    def to_dict(self):
+        return {
+            "assignment_id": self.assignment_id,
+            "course_code": self.course_code,
+            "title": self.title,
+            "description": self.description,
+            "due_date": self.due_date,
+            "max_points": self.max_points,
+            "assignment_type": self.assignment_type.value,
+            "submissions": self.submissions,
+            "created_date": self.created_date
+        }
+    
+    @classmethod
+    def from_dict(cls, data: dict):
+        assignment = cls(
+            data["assignment_id"],
+            data["course_code"],
+            data["title"],
+            data["description"],
+            data["due_date"],
+            data["max_points"],
+            AssignmentType(data["assignment_type"])
+        )
+        assignment.submissions = data.get("submissions", {})
+        assignment.created_date = data.get("created_date", datetime.now().isoformat())
+        return assignment
+
+
+class Quiz:
+    def __init__(self, quiz_id: str, course_code: str, title: str, questions: List[Dict]):
+        self.quiz_id = quiz_id
+        self.course_code = course_code
+        self.title = title
+        self.questions = questions  # List of {question: str, options: [], correct_answer: int}
+        self.time_limit = 30  # minutes
+        self.attempts = {}  # student_id -> {score: float, answers: [], date: date}
+        self.created_date = datetime.now().isoformat()
+    
+    def take_quiz(self, student_id: str, answers: List[int]) -> float:
+        """Student takes quiz, returns score"""
+        score = 0
+        for i, (question, answer) in enumerate(zip(self.questions, answers)):
+            if answer == question["correct_answer"]:
+                score += 1
+        
+        percentage = (score / len(self.questions)) * 100
+        
+        self.attempts[student_id] = {
+            "score": percentage,
+            "answers": answers,
+            "date": datetime.now().isoformat()
+        }
+        
+        return percentage
+    
+    def get_quiz_results(self, student_id: str) -> Optional[Dict]:
+        """Get quiz results for a student"""
+        return self.attempts.get(student_id)
+    
+    def to_dict(self):
+        return {
+            "quiz_id": self.quiz_id,
+            "course_code": self.course_code,
+            "title": self.title,
+            "questions": self.questions,
+            "time_limit": self.time_limit,
+            "attempts": self.attempts,
+            "created_date": self.created_date
+        }
+    
+    @classmethod
+    def from_dict(cls, data: dict):
+        quiz = cls(
+            data["quiz_id"],
+            data["course_code"],
+            data["title"],
+            data["questions"]
+        )
+        quiz.time_limit = data.get("time_limit", 30)
+        quiz.attempts = data.get("attempts", {})
+        quiz.created_date = data.get("created_date", datetime.now().isoformat())
+        return quiz
+
+
+class Exam(Quiz):
+    def __init__(self, exam_id: str, course_code: str, title: str, questions: List[Dict], duration: int = 120):
+        super().__init__(exam_id, course_code, title, questions)
+        self.time_limit = duration
+        self.exam_date = ""
+        self.location = ""
+        self.proctored = False
+    
+    def schedule_exam(self, exam_date: str, location: str, proctored: bool = False):
+        """Schedule an exam"""
+        self.exam_date = exam_date
+        self.location = location
+        self.proctored = proctored
+
+
+class Gradebook:
+    def __init__(self, course_code: str):
+        self.course_code = course_code
+        self.grades = {}  # student_id -> {"assignments": {}, "quizzes": {}, "exams": {}, "final_grade": None}
+        self.grading_scheme = {
+            "assignments": 40,
+            "quizzes": 20,
+            "midterm": 20,
+            "final_exam": 20
+        }
+    
+    def add_grade(self, student_id: str, category: str, item_id: str, grade: float, max_grade: float = 100):
+        """Add a grade for a student"""
+        if student_id not in self.grades:
+            self.grades[student_id] = {"assignments": {}, "quizzes": {}, "exams": {}, "final_grade": None}
+        
+        if category == "assignment":
+            self.grades[student_id]["assignments"][item_id] = {"grade": grade, "max": max_grade}
+        elif category == "quiz":
+            self.grades[student_id]["quizzes"][item_id] = {"grade": grade, "max": max_grade}
+        elif category == "exam":
+            self.grades[student_id]["exams"][item_id] = {"grade": grade, "max": max_grade}
+        
+        # Recalculate final grade
+        self.calculate_final_grade(student_id)
+    
+    def calculate_final_grade(self, student_id: str) -> float:
+        """Calculate final grade based on grading scheme"""
+        if student_id not in self.grades:
+            return 0.0
+        
+        student_grades = self.grades[student_id]
+        
+        # Calculate assignment average
+        assignment_total = sum(item["grade"] for item in student_grades["assignments"].values())
+        assignment_count = len(student_grades["assignments"])
+        assignment_avg = (assignment_total / assignment_count) if assignment_count > 0 else 0
+        
+        # Calculate quiz average
+        quiz_total = sum(item["grade"] for item in student_grades["quizzes"].values())
+        quiz_count = len(student_grades["quizzes"])
+        quiz_avg = (quiz_total / quiz_count) if quiz_count > 0 else 0
+        
+        # Calculate exam average
+        exam_total = sum(item["grade"] for item in student_grades["exams"].values())
+        exam_count = len(student_grades["exams"])
+        exam_avg = (exam_total / exam_count) if exam_count > 0 else 0
+        
+        # Weighted average
+        final_grade = (
+            assignment_avg * (self.grading_scheme["assignments"] / 100) +
+            quiz_avg * (self.grading_scheme["quizzes"] / 100) +
+            exam_avg * ((self.grading_scheme["midterm"] + self.grading_scheme["final_exam"]) / 100)
+        )
+        
+        student_grades["final_grade"] = final_grade
+        return final_grade
+    
+    def get_student_grades(self, student_id: str) -> Dict:
+        """Get all grades for a student"""
+        return self.grades.get(student_id, {})
+    
+    def to_dict(self):
+        return {
+            "course_code": self.course_code,
+            "grades": self.grades,
+            "grading_scheme": self.grading_scheme
+        }
+    
+    @classmethod
+    def from_dict(cls, data: dict):
+        gradebook = cls(data["course_code"])
+        gradebook.grades = data.get("grades", {})
+        gradebook.grading_scheme = data.get("grading_scheme", {
+            "assignments": 40, "quizzes": 20, "midterm": 20, "final_exam": 20
+        })
+        return gradebook
+
+
+class Feedback:
+    def __init__(self, course_code: str):
+        self.course_code = course_code
+        self.feedbacks = []  # List of {"student_id": str, "feedback": str, "rating": int, "date": str}
+    
+    def add_feedback(self, student_id: str, feedback_text: str, rating: int = 5):
+        """Student provides feedback for a course"""
+        self.feedbacks.append({
+            "student_id": student_id,
+            "feedback": feedback_text,
+            "rating": rating,
+            "date": datetime.now().isoformat()
+        })
+    
+    def get_average_rating(self) -> float:
+        """Calculate average rating for the course"""
+        if not self.feedbacks:
+            return 0.0
+        return sum(f["rating"] for f in self.feedbacks) / len(self.feedbacks)
+    
+    def get_feedbacks(self, min_rating: int = 0) -> List[Dict]:
+        """Get all feedbacks, optionally filtered by minimum rating"""
+        return [f for f in self.feedbacks if f["rating"] >= min_rating]
+
+
+class LMSManager:
+    def __init__(self, storage_folder="lms"):
+        self.storage_folder = storage_folder
+        if not os.path.exists(storage_folder):
+            os.makedirs(storage_folder)
+        
+        # Subfolders for organization
+        self.content_folder = os.path.join(storage_folder, "content")
+        self.assignments_folder = os.path.join(storage_folder, "assignments")
+        self.quizzes_folder = os.path.join(storage_folder, "quizzes")
+        self.gradebooks_folder = os.path.join(storage_folder, "gradebooks")
+        self.feedback_folder = os.path.join(storage_folder, "feedback")
+        
+        for folder in [self.content_folder, self.assignments_folder, 
+                      self.quizzes_folder, self.gradebooks_folder, self.feedback_folder]:
+            if not os.path.exists(folder):
+                os.makedirs(folder)
+    
+    # Content Management
+    def add_content(self, content: LMSContent):
+        path = os.path.join(self.content_folder, f"{content.content_id}.json")
+        with open(path, 'w', encoding='utf-8') as f:
+            json.dump(content.to_dict(), f, indent=4)
+    
+    def get_content(self, content_id: str) -> Optional[LMSContent]:
+        path = os.path.join(self.content_folder, f"{content_id}.json")
+        if os.path.exists(path):
+            with open(path, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+                return LMSContent.from_dict(data)
+        return None
+    
+    def get_course_content(self, course_code: str) -> List[LMSContent]:
+        """Get all content for a specific course"""
+        contents = []
+        for filename in os.listdir(self.content_folder):
+            if filename.endswith(".json"):
+                content = self.get_content(filename.replace(".json", ""))
+                if content and content.course_code == course_code:
+                    contents.append(content)
+        return contents
+    
+    # Assignment Management
+    def create_assignment(self, assignment: Assignment):
+        path = os.path.join(self.assignments_folder, f"{assignment.assignment_id}.json")
+        with open(path, 'w', encoding='utf-8') as f:
+            json.dump(assignment.to_dict(), f, indent=4)
+    
+    def get_assignment(self, assignment_id: str) -> Optional[Assignment]:
+        path = os.path.join(self.assignments_folder, f"{assignment_id}.json")
+        if os.path.exists(path):
+            with open(path, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+                return Assignment.from_dict(data)
+        return None
+    
+    # Quiz Management
+    def create_quiz(self, quiz: Quiz):
+        path = os.path.join(self.quizzes_folder, f"{quiz.quiz_id}.json")
+        with open(path, 'w', encoding='utf-8') as f:
+            json.dump(quiz.to_dict(), f, indent=4)
+    
+    def get_quiz(self, quiz_id: str) -> Optional[Quiz]:
+        path = os.path.join(self.quizzes_folder, f"{quiz_id}.json")
+        if os.path.exists(path):
+            with open(path, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+                return Quiz.from_dict(data)
+        return None
+    
+    # Gradebook Management
+    def get_gradebook(self, course_code: str) -> Gradebook:
+        path = os.path.join(self.gradebooks_folder, f"{course_code}.json")
+        if os.path.exists(path):
+            with open(path, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+                return Gradebook.from_dict(data)
+        # Create new gradebook if doesn't exist
+        return Gradebook(course_code)
+    
+    def save_gradebook(self, gradebook: Gradebook):
+        path = os.path.join(self.gradebooks_folder, f"{gradebook.course_code}.json")
+        with open(path, 'w', encoding='utf-8') as f:
+            json.dump(gradebook.to_dict(), f, indent=4)
+    
+    # Feedback Management
+    def get_feedback(self, course_code: str) -> Feedback:
+        path = os.path.join(self.feedback_folder, f"{course_code}.json")
+        if os.path.exists(path):
+            with open(path, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+                feedback = Feedback(course_code)
+                feedback.feedbacks = data.get("feedbacks", [])
+                return feedback
+        return Feedback(course_code)
+    
+    def save_feedback(self, feedback: Feedback):
+        path = os.path.join(self.feedback_folder, f"{feedback.course_code}.json")
+        with open(path, 'w', encoding='utf-8') as f:
+            json.dump({"feedbacks": feedback.feedbacks}, f, indent=4)
+
+main_integration.py
+
+# main_integration.py
+import os
+from datetime import datetime, timedelta
+
+# Import all necessary components from all files
+from Classroom_Manager import Scheduler, Classroom, Reservation
+from equipment_management import (
+    EquipmentManager, Equipment, 
+    LicenseManager, SoftwareLicense, 
+    PersonAllocationManager, LaboratoryEquipmentManager
+)
+from Student_Manager import StudentManager
+from Curriculum_Manager import CurriculumManager, Course, StudentPlanner
+from LMS_Manager import LMSManager, LMSContent, Assignment, Quiz, ContentType, AssignmentType
+
+def setup_and_demo_system():
+    """Initializes and demonstrates the integrated system."""
+    
+    # --- Initialization ---
+    
+    print("--- 📚 System Initialization ---")
+    
+    # Managers
+    scheduler = Scheduler()
+    eq_manager = EquipmentManager()
+    license_manager = LicenseManager()
+    person_manager = PersonAllocationManager()
+    lab_eq_manager = LaboratoryEquipmentManager()
+    student_manager = StudentManager()
+    curriculum_manager = CurriculumManager()  # NEW
+    student_planner = StudentPlanner()        # NEW
+    lms_manager = LMSManager()               # NEW
+
+    # Add Classrooms
+    scheduler.add_classroom(Classroom(id="R101", capacity=30, location="West Wing"))
+    scheduler.add_classroom(Classroom(id="R102", capacity=50, location="West Wing"))
+    scheduler.add_classroom(Classroom(id="R201", capacity=25, location="North Wing"))
+    print(f"Added Classrooms: {[r.id for r in scheduler.classrooms]}")
+
+    # Add General Equipment
+    eq_manager.add_equipment(Equipment("E001", "Projector", "AV"))
+    eq_manager.add_equipment(Equipment("E002", "Whiteboard", "Stationery"))
+    eq_manager.add_equipment(Equipment("E003", "Sound System", "AV"))
+    print(f"Added Equipment: {[e for e in eq_manager.equipment_list]}")
+
+    # Add Lab Equipment
+    lab_eq_manager.add_lab_equipment(Equipment("L001", "Microscope", "Biology"))
+    lab_eq_manager.add_lab_equipment(Equipment("L002", "Centrifuge", "Chemistry"))
+    print(f"Added Lab Equipment: {[e for e in lab_eq_manager.lab_equipment]}")
+
+    # Add Licenses
+    license_manager.add_license(SoftwareLicense("S001", "DesignSuite", 10))
+    license_manager.add_license(SoftwareLicense("S002", "ProgrammingIDE", 5))
+    print(f"Added Licenses: {[l for l in license_manager.licenses]}")
+
+    # Assign People
+    person_manager.assign_professor("P001", "Computer Engineering")
+    person_manager.assign_professor("P002", "Mechanical Engineering")
+    person_manager.assign_student("S001", "Computer Engineering")
+    print("Assigned Professor P001, P002 and Student S001.")
+
+    # Add Student Records
+    student_manager.add_student({
+        "student_id": "001",
+        "first_name": "Maria",
+        "last_name": "Ibraheem", 
+        "department": "Computer Engineering",
+        "email": "maria@example.edu",
+        "enrollment_year": 2019,
+        "gpa": 2.2,
+        "status": "enrolled"
+    })
+    
+    student_manager.add_student({
+        "student_id": "002", 
+        "first_name": "Mark",
+        "last_name": "Magdy", 
+        "department": "Mechanical Engineering",
+        "email": "mark@example.edu",
+        "enrollment_year": 2020,
+        "gpa": 3.5,
+        "status": "enrolled"
+    })
+    
+    student_manager.add_student({
+        "student_id": "007", 
+        "first_name": "James", 
+        "last_name": "Bond", 
+        "department": "Spy School", 
+        "enrollment_year": 2021
+    })
+    print("Added student records to disk.")
+    
+    # NEW: Add Curriculum Data
+    print("\n" + "="*50)
+    print("📚 CURRICULUM MODULE INITIALIZATION")
+    print("="*50)
+    
+    # Add sample courses
+    sample_courses = [
+        Course("CS101", "Introduction to Programming", 3, "Computer Engineering", 
+              "Basic programming concepts with Python", ["None"]),
+        Course("CS201", "Data Structures", 4, "Computer Engineering", 
+              "Advanced data structures and algorithms", ["CS101"]),
+        Course("ME101", "Engineering Mechanics", 3, "Mechanical Engineering",
+              "Basic mechanics principles and applications"),
+        Course("EE201", "Circuit Analysis", 4, "Electrical Engineering",
+              "Analysis of electrical circuits and systems")
+    ]
+    
+    for course in sample_courses:
+        try:
+            course.is_core = True  # Mark as core courses
+            curriculum_manager.add_course(course)
+            print(f"Added course: {course.course_code} - {course.course_name}")
+        except Exception as e:
+            print(f"Course {course.course_code} already exists or error: {e}")
+    
+    # Enroll students in courses
+    curriculum_manager.enroll_student("CS101", "001")  # Maria
+    curriculum_manager.enroll_student("CS101", "002")  # Mark
+    curriculum_manager.enroll_student("CS201", "001")  # Maria
+    curriculum_manager.enroll_student("ME101", "002")  # Mark
+    
+    print("\nStudent enrollments:")
+    print("  Maria (001) enrolled in: CS101, CS201")
+    print("  Mark (002) enrolled in: CS101, ME101")
+    
+    # NEW: Create study plans
+    student_planner.create_study_plan("001", "Fall 2024", ["CS101", "CS201"])
+    student_planner.create_study_plan("002", "Fall 2024", ["CS101", "ME101"])
+    print("\nCreated study plans for Fall 2024 semester")
+    
+    # NEW: Add LMS Data
+    print("\n" + "="*50)
+    print("🎓 LMS MODULE INITIALIZATION")
+    print("="*50)
+    
+    # Add LMS content
+    content = LMSContent(
+        "CONT_001",
+        "CS101",
+        "Introduction to Python",
+        ContentType.VIDEO,
+        "https://example.com/python-intro",
+        "Basic Python programming tutorial"
+    )
+    lms_manager.add_content(content)
+    print(f"Added LMS content: {content.title}")
+    
+    # Create assignment
+    assignment = Assignment(
+        "ASSIGN_001",
+        "CS101",
+        "Python Basics Assignment",
+        "Complete the following Python exercises",
+        "2024-12-15",
+        100,
+        AssignmentType.HOMEWORK
+    )
+    lms_manager.create_assignment(assignment)
+    print(f"Created assignment: {assignment.title}")
+    
+    # Student submits assignment
+    assignment.submit_assignment("001", "My Python assignment submission")
+    assignment.grade_assignment("001", 85, "Good work!")
+    lms_manager.create_assignment(assignment)  # Save with submission
+    
+    print("Maria (001) submitted and graded assignment: 85/100")
+    
+    # Create quiz
+    quiz = Quiz(
+        "QUIZ_001",
+        "CS101",
+        "Python Fundamentals Quiz",
+        [
+            {"question": "What is Python?", "options": ["A snake", "A programming language", "A type of food", "A car"], "correct_answer": 1},
+            {"question": "What symbol is used for comments?", "options": ["//", "#", "/*", "<!--"], "correct_answer": 1},
+            {"question": "Which is a Python data type?", "options": ["int", "string", "list", "All of the above"], "correct_answer": 3}
+        ]
+    )
+    lms_manager.create_quiz(quiz)
+    print(f"Created quiz: {quiz.title}")
+    
+    # Student takes quiz
+    quiz_score = quiz.take_quiz("001", [1, 1, 3])
+    lms_manager.create_quiz(quiz)  # Save with attempt
+    print(f"Maria (001) took quiz and scored: {quiz_score:.1f}%")
+    
+    print("\n" + "="*50 + "\n")
+    
+    # --- Integration Demo ---
+
+    print("--- 🗓️ Classroom Scheduling Demo ---")
+    
+    now = datetime.now().replace(minute=0, second=0, microsecond=0)
+    later = now + timedelta(hours=1)
+    
+    # 1. Successful Reservation
+    result = scheduler.reserve_classroom("R101", now, later, "Prof. P001")
+    print(f"Reservation R101 (1 hour): {result}")
+    
+    # 2. Conflict Check
+    conflict_start = now + timedelta(minutes=30)
+    conflict_end = later + timedelta(minutes=30)
+    result = scheduler.reserve_classroom("R101", conflict_start, conflict_end, "Student S001")
+    print(f"Reservation R101 (Conflict): {result}")
+    
+    # 3. Maintenance Check
+    scheduler.report_maintenance("R102", "Projector bulb replacement")
+    result = scheduler.reserve_classroom("R102", now, later, "Another Prof")
+    print(f"Reservation R102 (Maintenance): {result}")
+    print(f"R102 Maintenance Notes: {scheduler.get_maintenance_reports('R102')}")
+
+    print("\n" + "="*50 + "\n")
+    
+    print("--- 🛠️ Equipment and Licensing Demo ---")
+    
+    # 1. Allocate General Equipment
+    eq_manager.allocate_equipment("E001", "R101")
+    print(f"Equipment E001 (Projector) allocated to R101.")
+    print(f"Tracking: {eq_manager.track_equipment()[0]}")
+    
+    # 2. Allocate Lab Equipment
+    lab_eq_manager.allocate_lab_equipment("L001", "S001")
+    print(f"Lab Equipment L001 (Microscope) allocated to S001.")
+    print(f"Tracking Lab: {lab_eq_manager.track_lab_equipment()[0]}")
+
+    # 3. Allocate License Seat
+    license_manager.allocate("S001")
+    license_manager.allocate("S001")  # Allocate two seats
+    print(f"Allocated two seats for DesignSuite (S001).")
+    print(f"License Tracking: {license_manager.track_licenses()}")
+
+    print("\n" + "="*50 + "\n")
+
+    print("--- 🧑‍🎓 Student and People Demo ---")
+    
+    # 1. Retrieve Student Record
+    student_007 = student_manager.get_student("007")
+    print("Retrieved Student 007:")
+    student_manager.print_student(student_007)
+
+    # 2. Update Student's Allocation in central People Manager
+    person_manager.assign_student("007", "Field Operations")
+    print(f"Student 007's department in People Manager updated to: {person_manager.student_allocations['007']}")
+    
+    # 3. List all professors/students in the Person Allocation Manager
+    print("All people tracking:")
+    for role, people in person_manager.track_people().items():
+        print(f"  {role.capitalize()}: {people}")
+    
+    # 4. Edit student record
+    student_manager.edit_student("001", {"email": "maria.newmail@uni.edu", "gpa": 2.5})
+    print("Updated Maria's email and GPA")
+    
+    updated_maria = student_manager.get_student("001")
+    print("Updated Maria:")
+    student_manager.print_student(updated_maria)
+    
+    print("\n" + "="*50 + "\n")
+    
+    print("--- 📚 Curriculum & LMS Demo ---")
+    
+    # 1. List all courses
+    courses = curriculum_manager.list_courses()
+    print(f"Total courses in catalogue: {len(courses)}")
+    print("Sample courses:")
+    for course in courses[:3]:  # Show first 3
+        print(f"  • {course.course_code}: {course.course_name} ({course.credits} credits)")
+    
+    # 2. Show student study plans
+    print("\nStudent study plans:")
+    maria_plan = student_planner.get_study_plan("001")
+    mark_plan = student_planner.get_study_plan("002")
+    
+    print("Maria's Fall 2024 plan:")
+    for semester, course_list in maria_plan.items():
+        print(f"  {semester}: {', '.join(course_list)}")
+    
+    print("Mark's Fall 2024 plan:")
+    for semester, course_list in mark_plan.items():
+        print(f"  {semester}: {', '.join(course_list)}")
+    
+    # 3. Show LMS content for CS101
+    print("\nLMS Content for CS101:")
+    cs101_content = lms_manager.get_course_content("CS101")
+    for content in cs101_content:
+        print(f"  • {content.title} ({content.content_type.value})")
+    
+    # 4. Show assignment submissions
+    print("\nAssignment submissions for CS101:")
+    cs101_assignment = lms_manager.get_assignment("ASSIGN_001")
+    if cs101_assignment:
+        for student_id, submission in cs101_assignment.submissions.items():
+            print(f"  Student {student_id}: {submission.get('grade', 'Not graded')}/100")
+    
+    # 5. Show quiz results
+    print("\nQuiz results for CS101:")
+    cs101_quiz = lms_manager.get_quiz("QUIZ_001")
+    if cs101_quiz and "001" in cs101_quiz.attempts:
+        attempt = cs101_quiz.attempts["001"]
+        print(f"  Student 001: {attempt['score']:.1f}%")
+    
+    print("\n" + "="*50)
+    print("✅ COMPREHENSIVE DEMO COMPLETED SUCCESSFULLY!")
+    print("="*50)
+
+
+def launch_comprehensive_gui():
+    """Launch the comprehensive GUI application"""
+    try:
+        import tkinter as tk
+        from GUI import UniversityManagementGUI
+        
+        print("🚀 Launching Comprehensive University Management System GUI...")
+        print("Please wait while the GUI initializes...")
+        
+        root = tk.Tk()
+        app = UniversityManagementGUI(root)
+        print("✅ GUI initialized successfully!")
+        print("📋 Available Features:")
+        print("   • Classroom Management & Reservations")
+        print("   • Equipment & Lab Equipment Tracking")
+        print("   • Software License Management")
+        print("   • Student Records System")
+        print("   • People Allocation Management")
+        print("   • 📚 Curriculum & Course Catalogue Management")
+        print("   • 🎓 Learning Management System (LMS)")
+        print("   • 📝 Student Study Planning")
+        print("   • 📊 Gradebook & Feedback System")
+        print("   • Real-time Dashboard")
+        
+        root.mainloop()
+        
+    except ImportError as e:
+        print(f"❌ Error: Could not import GUI module. Make sure GUI.py is in the same directory.")
+        print(f"Detailed error: {e}")
+    except Exception as e:
+        print(f"❌ Error launching GUI: {e}")
+        print("Make sure all required modules are available:")
+        print("  - Classroom_Manager.py")
+        print("  - equipment_management.py") 
+        print("  - Student_Manager.py")
+        print("  - Curriculum_Manager.py")     # NEW
+        print("  - LMS_Manager.py")           # NEW
+        print("  - GUI.py")
+
+
+def system_status_check():
+    """Check if all required components are available"""
+    print("\n🔍 Performing System Status Check...")
+    
+    required_files = [
+        "Classroom_Manager.py",
+        "equipment_management.py", 
+        "Student_Manager.py",
+        "Curriculum_Manager.py",   # NEW
+        "LMS_Manager.py",         # NEW
+        "GUI.py"
+    ]
+    
+    all_ok = True
+    for file in required_files:
+        if os.path.exists(file):
+            print(f"✅ {file} - Found")
+        else:
+            print(f"❌ {file} - Missing")
+            all_ok = False
+    
+    if all_ok:
+        print("✅ All system components are ready!")
+    else:
+        print("❌ Some components are missing. Please check the files above.")
+    
+    return all_ok
+
+
+if __name__ == "__main__":
+    # Display welcome message
+    print("=" * 80)
+    print("              COMPREHENSIVE UNIVERSITY MANAGEMENT SYSTEM v3.0")
+    print("=" * 80)
+    print("\nThis system integrates:")
+    print("  • Student Information Management")
+    print("  • Classroom Scheduling & Reservations") 
+    print("  • Equipment & Laboratory Management")
+    print("  • Software License Tracking")
+    print("  • People Allocation System")
+    print("  • 📚 Curriculum & Course Catalogue")
+    print("  • 🎓 Learning Management System (LMS)")
+    print("  • 📝 Student Study Planning & Progress Tracking")
+    
+    # Check system status
+    system_ready = system_status_check()
+    
+    if not system_ready:
+        print("\n⚠️  Please ensure all required files are in the same directory.")
+        exit(1)
+    
+    # Main menu
+    while True:
+        print("\n" + "="*50)
+        print("MAIN MENU")
+        print("="*50)
+        print("1. Run Comprehensive Console Demo (All Modules)")
+        print("2. Launch Full-Featured GUI Application")
+        print("3. System Information")
+        print("4. Exit")
+        
+        choice = input("\nEnter your choice (1-4): ").strip()
+        
+        if choice == "1":
+            print("\n" + "="*50)
+            print("STARTING COMPREHENSIVE CONSOLE DEMO...")
+            print("="*50)
+            print("This demo includes:")
+            print("  • Classroom Management & Reservations")
+            print("  • Equipment & License Management")
+            print("  • Student Records System")
+            print("  • 📚 Curriculum & Course Catalogue")
+            print("  • 🎓 Learning Management System")
+            print("  • 📝 Student Study Planning")
+            print("="*50)
+            setup_and_demo_system()
+            print("\n" + "="*50)
+            print("CONSOLE DEMO COMPLETED")
+            print("="*50)
+            
+        elif choice == "2":
+            print("\n" + "="*50)
+            print("LAUNCHING COMPREHENSIVE GUI...")
+            print("="*50)
+            launch_comprehensive_gui()
+            print("\nGUI session ended. Returning to main menu...")
+            
+        elif choice == "3":
+            print("\n" + "="*50)
+            print("SYSTEM INFORMATION")
+            print("="*50)
+            print("Version: Comprehensive University Management System v3.0")
+            print("\nFeatures:")
+            print("  • 10-Tab GUI Interface with Real-time Updates")
+            print("  • Student Records with File-based Storage")
+            print("  • Classroom Reservation System with Conflict Detection")
+            print("  • Equipment & Lab Equipment Allocation Tracking")
+            print("  • Software License Seat Management")
+            print("  • Professor & Student Department Allocation")
+            print("  • Maintenance Reporting System")
+            print("  • 📚 Course Catalogue Management")
+            print("  • 🎓 Learning Management System (LMS)")
+            print("  • 📝 Student Study Planning Tools")
+            print("  • 📊 Gradebook & Feedback System")
+            print("  • 💬 Student Feedback & Course Ratings")
+            print("  • 📈 Interactive Dashboard with System Statistics")
+            print("\nModules:")
+            print("  - Classroom_Manager.py")
+            print("  - equipment_management.py")
+            print("  - Student_Manager.py")
+            print("  - Curriculum_Manager.py")
+            print("  - LMS_Manager.py")
+            print("  - GUI.py")
+            
+        elif choice == "4":
+            print("\nThank you for using the University Management System!")
+            print("Goodbye! 👋")
+            break
+            
+        else:
+            print("❌ Invalid choice. Please enter 1, 2, 3, or 4.")
+
+Staff_Manager.py
+
+class StaffMember:
+    def  __init__(self, name, email, phone):
+        self.name = name
+        self.email = email
+        self.phone = phone
+        # Initialize an empty performance dictionary for tasks and their statuses
+        self.performance = {}  
+    
+    def assign_task(self, task):
+        if task not in self.performance:
+            self.performance[task] = [] 
+    
+    def complete_task(self, task):
+        if task in self.performance:
+            self.performance[task].append(True)   # True signifies that the task was completed
+        else:
+            print("This staff member does not have this task assigned.")
+    
+    def fail_to_complete_task(self, task):
+        if task in self.performance:
+            self.performance[task].append(False)  # False signifies that the task was not completed
+        else:
+            print("This staff member does not have this task assigned.")
+    
+    def view_performance(self):
+        if len(self.performance) == 0:
+            return "No tasks assigned yet."
+        
+        performance_str = ""
+        for task, statuses in self.performance.items():
+            success_rate = sum(statuses)/len(statuses)*100    # Calculate the completion rate of a particular task
+            performance_str += f"Task: {task} | Completion Rate: {success_rate}%\n" 
+        
+        return performance_str
+    
+    def issue_reward(self, reward):
+        """Issues the specified reward to the staff member."""
+        print(f"{self.name} has been issued {reward}.")
+    
+    def view_payroll(self):
+        """This method should return a dictionary containing pay details. 
+        This is just an example and will need to be replaced with actual implementation"""
+        raise NotImplementedError("Method not implemented")
+        
+    def request_leave(self, start_date: str, end_date: str):
+        """This method should handle the creation of a leave request. 
+        This is just an example and will need to be replaced with actual implementation"""
+        raise NotImplementedError("Method not implemented")
+        
+    def view_leave(self):
+        """This method should return a dictionary containing details about current leave requests. 
+        This is just an example and will need to be replaced with actual implementation"""
+        raise NotImplementedError("Method not implemented")
+    
+    def view_benefits(self):
+        """This method should return a dictionary containing benefits of the staff member. 
+        This is just an example and will need to be replaced with actual implementation"""
+        raise NotImplementedError("Method not implemented")
+    
+    
+class HumanResources:
+    def __init__(self):
+        self.professors = {}
+        self.teachingAssistants = {}
+        
+    def add_professor(self, prof: Professor):
+        self.professors[prof.name] = prof
+    
+    def add_ta(self, ta: TeachingAssistant):
+        self.teachingAssistants[ta.name] = ta
+        
+    def view_staff_info(self, name: str):
+        if name in self.professors:
+            prof = self.professors[name]
+            print(f"{prof.name}'s Office Hours: {prof.office_hours}\nEmail: {prof.email} | Phone: {prof.phone}\nCourses: {prof.courses}")
+        elif name in self.teachingAssistants:
+            ta = self.teachingAssistants[name]
+            print(f"{ta.name}'s Contact Information:\nEmail: {ta.email} | Phone: {ta.phone}\nCourse: {ta.course}")
+        else:
+            print("Staff member not found.")
+            
+class DepartmentHead:
+    def __init__(self):
+        self.research = {}
+        
+    def publish_research(self, name: str, research: dict):
+        # Assume research is a dictionary with key-value pairs of topic and paper link.
+        self.research[name] = research 
+            
+class UniversityHead:
+    def __init__(self):
+        self.activities = {}
+        
+    def manage_activity(self, name: str, activity: dict):
+        # Assume activity is a dictionary with key-value pairs of event and date.
+        self.activities[name] = activity 
+
+class Professor(StaffMember):  # Inherits from StaffMember
+    def __init__(self, name, email, phone, office_hours, courses):
+        super().__init__(name, email, phone)
+        self.office_hours = office_hours    
+        self.courses = courses  
+        
+class TeachingAssistant(StaffMember):  # Inherits from StaffMember
+    def __init__(self, name, email, phone, course):
+        super().__init__(name, email, phone)
+        self.course = course
+
+
+student_manager.py
+
+import shutil
+shutil.rmtree("students", ignore_errors=True)
+
+import os
+
+class StudentManager:
+    def __init__(self, folder="students"):
+        self.folder = folder
+        if not os.path.exists(folder):
+            os.makedirs(folder)
+
+    def _path(self, student_id):
+        return os.path.join(self.folder, f"{student_id}.txt")
+
+    # Add Student
+    def add_student(self, student):
+        path = self._path(student["student_id"])
+
+        if os.path.exists(path):
+            raise ValueError("Student already exists.")
+
+        with open(path, "w", encoding="utf-8") as f:
+            for key, value in student.items():
+                f.write(f"{key}: {value}\n")
+
+    # Read Student File
+    def get_student(self, student_id):
+        path = self._path(student_id)
+        if not os.path.exists(path):
+            return None
+
+        student = {}
+        with open(path, "r", encoding="utf-8") as f:
+            for line in f:
+                if ":" in line:
+                    key, value = line.strip().split(":", 1)
+                    student[key.strip()] = value.strip()
+
+        return student
+
+    # Delete Student
+    def delete_student(self, student_id):
+        path = self._path(student_id)
+        if os.path.exists(path):
+            os.remove(path)
+            return True
+        return False
+
+    # Edit Student File
+    def edit_student(self, student_id, updates):
+        student = self.get_student(student_id)
+        if student is None:
+            return False
+
+        # apply updates
+        for key, value in updates.items():
+            student[key] = value
+
+        # rewrite file
+        path = self._path(student_id)
+        with open(path, "w", encoding="utf-8") as f:
+            for k, v in student.items():
+                f.write(f"{k}: {v}\n")
+
+        return True
+
+    # List All Students
+    def list_students(self):
+        data = []
+        for filename in os.listdir(self.folder):
+            if filename.endswith(".txt"):
+                student_id = filename.replace(".txt", "")
+                data.append(self.get_student(student_id))
+        return data
+
+    # Print Student 
+    def print_student(self, student):
+        if student is None:
+            print("Student not found.")
+            return
+        
+        print("\n---------------------------")
+        for key, value in student.items():
+            print(f"{key}: {value}")
+        print("---------------------------\n")
+
+
+# EXAMPLE USAGE (DEMO)
+if __name__ == "__main__":
+    manager = StudentManager()
+
+    # Add Students
+    print("Add students:\n")
+    manager.add_student({
+        "student_id": "001",
+        "first_name": "Maria",
+        "last_name": "Ibraheem",
+        "dob": "2000-07-26",
+        "department": "Computer Engineering",
+        "email": "maria@example.edu",
+        "enrollment_year": 2019,
+        "gpa": 2.2,
+        "status": "enrolled"
+    })
+
+    manager.add_student({
+        "student_id": "002",
+        "first_name": "Mark",
+        "last_name": "Magdy",
+        "dob": "2002-11-02",
+        "department": "Mechanical Engineering",
+        "email": "mark@example.edu",
+        "enrollment_year": 2020,
+        "gpa": 3.5,
+        "status": "enrolled"
+    })
+
+    # List students 
+    print("Listing all students:")
+    for st in manager.list_students():
+        manager.print_student(st)
+
+    # Edit Maria
+    print("Edit Maria's email:\n")
+    manager.edit_student("001", {"email": "maria.newmail@uni.edu"})
+
+    # Print edited Maria
+    print("Updated Maria:")
+    manager.print_student(manager.get_student("001"))
+
+    # Delete Mark
+    print("Deleting Mark:\n")
+    manager.delete_student("002")
+
+    # List remaining students
+    print("Final Students List:")
+    for st in manager.list_students():
+        manager.print_student(st)

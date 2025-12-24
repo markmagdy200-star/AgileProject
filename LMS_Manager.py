@@ -225,25 +225,25 @@ class Gradebook:
         student_grades = self.grades[student_id]
         
         # Calculate assignment average
-        assignment_total = sum(item["grade"] for item in student_grades["assignments"].values())
-        assignment_count = len(student_grades["assignments"])
+        assignment_total = sum(item["grade"] for item in student_grades.get("assignments", {}).values())
+        assignment_count = len(student_grades.get("assignments", {}))
         assignment_avg = (assignment_total / assignment_count) if assignment_count > 0 else 0
         
         # Calculate quiz average
-        quiz_total = sum(item["grade"] for item in student_grades["quizzes"].values())
-        quiz_count = len(student_grades["quizzes"])
+        quiz_total = sum(item["grade"] for item in student_grades.get("quizzes", {}).values())
+        quiz_count = len(student_grades.get("quizzes", {}))
         quiz_avg = (quiz_total / quiz_count) if quiz_count > 0 else 0
         
         # Calculate exam average
-        exam_total = sum(item["grade"] for item in student_grades["exams"].values())
-        exam_count = len(student_grades["exams"])
+        exam_total = sum(item["grade"] for item in student_grades.get("exams", {}).values())
+        exam_count = len(student_grades.get("exams", {}))
         exam_avg = (exam_total / exam_count) if exam_count > 0 else 0
         
         # Weighted average
         final_grade = (
-            assignment_avg * (self.grading_scheme["assignments"] / 100) +
-            quiz_avg * (self.grading_scheme["quizzes"] / 100) +
-            exam_avg * ((self.grading_scheme["midterm"] + self.grading_scheme["final_exam"]) / 100)
+            assignment_avg * (self.grading_scheme.get("assignments", 0) / 100) +
+            quiz_avg * (self.grading_scheme.get("quizzes", 0) / 100) +
+            exam_avg * ((self.grading_scheme.get("midterm", 0) + self.grading_scheme.get("final_exam", 0)) / 100)
         )
         
         student_grades["final_grade"] = final_grade
@@ -316,23 +316,32 @@ class LMSManager:
     # Content Management
     def add_content(self, content: LMSContent):
         path = os.path.join(self.content_folder, f"{content.content_id}.json")
-        with open(path, 'w', encoding='utf-8') as f:
-            json.dump(content.to_dict(), f, indent=4)
+        try:
+            with open(path, 'w', encoding='utf-8') as f:
+                json.dump(content.to_dict(), f, indent=4)
+        except IOError as e:
+            print(f"Error saving content {content.content_id}: {e}")
     
     def get_content(self, content_id: str) -> Optional[LMSContent]:
         path = os.path.join(self.content_folder, f"{content_id}.json")
         if os.path.exists(path):
-            with open(path, 'r', encoding='utf-8') as f:
-                data = json.load(f)
-                return LMSContent.from_dict(data)
+            try:
+                with open(path, 'r', encoding='utf-8') as f:
+                    data = json.load(f)
+                    return LMSContent.from_dict(data)
+            except (json.JSONDecodeError, FileNotFoundError):
+                return None
         return None
     
     def get_course_content(self, course_code: str) -> List[LMSContent]:
         """Get all content for a specific course"""
         contents = []
+        if not os.path.exists(self.content_folder): return contents
+        
         for filename in os.listdir(self.content_folder):
             if filename.endswith(".json"):
-                content = self.get_content(filename.replace(".json", ""))
+                content_id = filename.replace(".json", "")
+                content = self.get_content(content_id)
                 if content and content.course_code == course_code:
                     contents.append(content)
         return contents
@@ -340,58 +349,82 @@ class LMSManager:
     # Assignment Management
     def create_assignment(self, assignment: Assignment):
         path = os.path.join(self.assignments_folder, f"{assignment.assignment_id}.json")
-        with open(path, 'w', encoding='utf-8') as f:
-            json.dump(assignment.to_dict(), f, indent=4)
+        try:
+            with open(path, 'w', encoding='utf-8') as f:
+                json.dump(assignment.to_dict(), f, indent=4)
+        except IOError as e:
+            print(f"Error saving assignment {assignment.assignment_id}: {e}")
     
     def get_assignment(self, assignment_id: str) -> Optional[Assignment]:
         path = os.path.join(self.assignments_folder, f"{assignment_id}.json")
         if os.path.exists(path):
-            with open(path, 'r', encoding='utf-8') as f:
-                data = json.load(f)
-                return Assignment.from_dict(data)
+            try:
+                with open(path, 'r', encoding='utf-8') as f:
+                    data = json.load(f)
+                    return Assignment.from_dict(data)
+            except (json.JSONDecodeError, FileNotFoundError):
+                return None
         return None
     
     # Quiz Management
     def create_quiz(self, quiz: Quiz):
         path = os.path.join(self.quizzes_folder, f"{quiz.quiz_id}.json")
-        with open(path, 'w', encoding='utf-8') as f:
-            json.dump(quiz.to_dict(), f, indent=4)
+        try:
+            with open(path, 'w', encoding='utf-8') as f:
+                json.dump(quiz.to_dict(), f, indent=4)
+        except IOError as e:
+            print(f"Error saving quiz {quiz.quiz_id}: {e}")
     
     def get_quiz(self, quiz_id: str) -> Optional[Quiz]:
         path = os.path.join(self.quizzes_folder, f"{quiz_id}.json")
         if os.path.exists(path):
-            with open(path, 'r', encoding='utf-8') as f:
-                data = json.load(f)
-                return Quiz.from_dict(data)
+            try:
+                with open(path, 'r', encoding='utf-8') as f:
+                    data = json.load(f)
+                    return Quiz.from_dict(data)
+            except (json.JSONDecodeError, FileNotFoundError):
+                return None
         return None
     
     # Gradebook Management
     def get_gradebook(self, course_code: str) -> Gradebook:
         path = os.path.join(self.gradebooks_folder, f"{course_code}.json")
         if os.path.exists(path):
-            with open(path, 'r', encoding='utf-8') as f:
-                data = json.load(f)
-                return Gradebook.from_dict(data)
-        # Create new gradebook if doesn't exist
+            try:
+                with open(path, 'r', encoding='utf-8') as f:
+                    data = json.load(f)
+                    return Gradebook.from_dict(data)
+            except (json.JSONDecodeError, FileNotFoundError):
+                pass # Fall through to create new
+        # Create new gradebook if doesn't exist or file corrupted
         return Gradebook(course_code)
     
     def save_gradebook(self, gradebook: Gradebook):
         path = os.path.join(self.gradebooks_folder, f"{gradebook.course_code}.json")
-        with open(path, 'w', encoding='utf-8') as f:
-            json.dump(gradebook.to_dict(), f, indent=4)
+        try:
+            with open(path, 'w', encoding='utf-8') as f:
+                json.dump(gradebook.to_dict(), f, indent=4)
+        except IOError as e:
+            print(f"Error saving gradebook for {gradebook.course_code}: {e}")
     
     # Feedback Management
     def get_feedback(self, course_code: str) -> Feedback:
         path = os.path.join(self.feedback_folder, f"{course_code}.json")
         if os.path.exists(path):
-            with open(path, 'r', encoding='utf-8') as f:
-                data = json.load(f)
-                feedback = Feedback(course_code)
-                feedback.feedbacks = data.get("feedbacks", [])
-                return feedback
+            try:
+                with open(path, 'r', encoding='utf-8') as f:
+                    data = json.load(f)
+                    feedback_obj = Feedback(course_code)
+                    feedback_obj.feedbacks = data.get("feedbacks", [])
+                    return feedback_obj
+            except (json.JSONDecodeError, FileNotFoundError):
+                pass # Fall through to create new
         return Feedback(course_code)
     
     def save_feedback(self, feedback: Feedback):
         path = os.path.join(self.feedback_folder, f"{feedback.course_code}.json")
-        with open(path, 'w', encoding='utf-8') as f:
-            json.dump({"feedbacks": feedback.feedbacks}, f, indent=4)
+        try:
+            with open(path, 'w', encoding='utf-8') as f:
+                json.dump({"feedbacks": feedback.feedbacks}, f, indent=4)
+        except IOError as e:
+            print(f"Error saving feedback for {feedback.course_code}: {e}")

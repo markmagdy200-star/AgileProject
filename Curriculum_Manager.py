@@ -59,10 +59,25 @@ class CurriculumManager:
         self.elective_courses = []
         self.departments = ["Computer Engineering", "Mechanical Engineering", 
                            "Electrical Engineering", "Civil Engineering", "General"]
-        
+        self.load_course_lists() # Load existing core/elective lists
+
     def _get_course_path(self, course_code: str) -> str:
         return os.path.join(self.storage_folder, f"{course_code}.json")
     
+    def load_course_lists(self):
+        """Loads existing core and elective course codes on initialization."""
+        self.core_courses = []
+        self.elective_courses = []
+        for filename in os.listdir(self.storage_folder):
+            if filename.endswith(".json"):
+                course_code = filename.replace(".json", "")
+                course = self.get_course(course_code)
+                if course:
+                    if course.is_core:
+                        self.core_courses.append(course_code)
+                    else:
+                        self.elective_courses.append(course_code)
+
     def add_course(self, course: Course):
         """Add a new course to the catalogue"""
         path = self._get_course_path(course.course_code)
@@ -73,6 +88,7 @@ class CurriculumManager:
         with open(path, 'w', encoding='utf-8') as f:
             json.dump(course.to_dict(), f, indent=4)
         
+        # Update internal lists
         if course.is_core:
             self.core_courses.append(course.course_code)
         else:
@@ -86,14 +102,20 @@ class CurriculumManager:
             return None
         
         with open(path, 'r', encoding='utf-8') as f:
-            data = json.load(f)
-            return Course.from_dict(data)
+            try:
+                data = json.load(f)
+                return Course.from_dict(data)
+            except (json.JSONDecodeError, FileNotFoundError):
+                return None # Handle corrupted files
     
     def update_course(self, course_code: str, updates: dict):
         """Update course information"""
         course = self.get_course(course_code)
         if not course:
             raise ValueError(f"Course {course_code} not found.")
+        
+        # Track if core status changed to update lists
+        old_is_core = course.is_core
         
         # Update fields
         for key, value in updates.items():
@@ -103,6 +125,20 @@ class CurriculumManager:
         # Save back
         with open(self._get_course_path(course_code), 'w', encoding='utf-8') as f:
             json.dump(course.to_dict(), f, indent=4)
+        
+        # Update core/elective lists if status changed
+        new_is_core = course.is_core
+        if old_is_core != new_is_core:
+            if new_is_core:
+                if course_code in self.elective_courses:
+                    self.elective_courses.remove(course_code)
+                if course_code not in self.core_courses:
+                    self.core_courses.append(course_code)
+            else: # Became elective
+                if course_code in self.core_courses:
+                    self.core_courses.remove(course_code)
+                if course_code not in self.elective_courses:
+                    self.elective_courses.append(course_code)
     
     def delete_course(self, course_code: str) -> bool:
         """Remove a course from catalogue"""
@@ -116,11 +152,10 @@ class CurriculumManager:
                 self.core_courses.remove(course_code)
             if course_code in self.elective_courses:
                 self.elective_courses.remove(course_code)
-                
             return True
         return False
     
-    def list_courses(self, department: str = None, core_only: bool = False) -> List[Course]:
+    def list_courses(self, department: str = None, core_only: bool = None) -> List[Course]:
         """List all courses, optionally filtered"""
         courses = []
         
@@ -129,12 +164,12 @@ class CurriculumManager:
                 course_code = filename.replace(".json", "")
                 course = self.get_course(course_code)
                 
-                if department and course.department != department:
-                    continue
-                if core_only and not course.is_core:
-                    continue
-                    
-                courses.append(course)
+                if course:
+                    if department and course.department != department:
+                        continue
+                    if core_only is not None and course.is_core != core_only:
+                        continue
+                    courses.append(course)
         
         return courses
     
@@ -171,7 +206,7 @@ class CurriculumManager:
                 course_code = filename.replace(".json", "")
                 course = self.get_course(course_code)
                 
-                if student_id in course.students_enrolled:
+                if course and student_id in course.students_enrolled:
                     student_courses.append(course)
         
         return student_courses
@@ -185,15 +220,32 @@ class CurriculumManager:
                 course_code = filename.replace(".json", "")
                 course = self.get_course(course_code)
                 
-                if course.professor_id == professor_id:
+                if course and course.professor_id == professor_id:
                     professor_courses.append(course)
         
         return professor_courses
 
 
 class StudentPlanner:
-    def __init__(self):
+    def __init__(self, storage_file="student_plans.json"):
+        self.storage_file = storage_file
         self.student_plans = {}  # student_id -> {semester: [course_codes]}
+        self.load_plans()
+
+    def load_plans(self):
+        if os.path.exists(self.storage_file):
+            try:
+                with open(self.storage_file, 'r') as f:
+                    self.student_plans = json.load(f)
+            except (json.JSONDecodeError, FileNotFoundError):
+                self.student_plans = {}
+
+    def save_plans(self):
+        try:
+            with open(self.storage_file, 'w') as f:
+                json.dump(self.student_plans, f, indent=4)
+        except IOError as e:
+            print(f"Error saving student plans: {e}")
     
     def create_study_plan(self, student_id: str, semester: str, course_codes: List[str]):
         """Create or update a student's semester study plan"""
@@ -201,6 +253,7 @@ class StudentPlanner:
             self.student_plans[student_id] = {}
         
         self.student_plans[student_id][semester] = course_codes
+        self.save_plans()
     
     def get_study_plan(self, student_id: str, semester: str = None) -> Dict:
         """Get student's study plan for a specific or all semesters"""
@@ -222,6 +275,7 @@ class StudentPlanner:
         
         if course_code not in self.student_plans[student_id][semester]:
             self.student_plans[student_id][semester].append(course_code)
+            self.save_plans()
     
     def remove_course_from_plan(self, student_id: str, semester: str, course_code: str):
         """Remove a course from student's semester plan"""
@@ -230,3 +284,4 @@ class StudentPlanner:
             course_code in self.student_plans[student_id][semester]):
             
             self.student_plans[student_id][semester].remove(course_code)
+            self.save_plans()

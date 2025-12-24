@@ -1,11 +1,11 @@
-import shutil
-shutil.rmtree("students", ignore_errors=True)
-
+# Student_Manager.py
 import os
+import shutil
 
 class StudentManager:
     def __init__(self, folder="students"):
         self.folder = folder
+        # FIX: Removed shutil.rmtree to prevent data loss on startup
         if not os.path.exists(folder):
             os.makedirs(folder)
 
@@ -30,13 +30,21 @@ class StudentManager:
             return None
 
         student = {}
-        with open(path, "r", encoding="utf-8") as f:
-            for line in f:
-                if ":" in line:
-                    key, value = line.strip().split(":", 1)
-                    student[key.strip()] = value.strip()
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                for line in f:
+                    if ":" in line:
+                        key, value = line.strip().split(":", 1)
+                        student[key.strip()] = value.strip()
+        except Exception as e:
+            print(f"Error reading student file {path}: {e}")
+            return None # Return None if file is unreadable
 
         return student
+    
+    def student_exists(self, student_id):
+        """Checks if a student record exists."""
+        return os.path.exists(self._path(student_id))
 
     # Delete Student
     def delete_student(self, student_id):
@@ -58,19 +66,27 @@ class StudentManager:
 
         # rewrite file
         path = self._path(student_id)
-        with open(path, "w", encoding="utf-8") as f:
-            for k, v in student.items():
-                f.write(f"{k}: {v}\n")
-
+        try:
+            with open(path, "w", encoding="utf-8") as f:
+                for k, v in student.items():
+                    f.write(f"{k}: {v}\n")
+        except IOError as e:
+            print(f"Error writing to student file {path}: {e}")
+            return False
         return True
 
     # List All Students
     def list_students(self):
         data = []
+        if not os.path.exists(self.folder):
+            return data # Return empty list if folder doesn't exist
+            
         for filename in os.listdir(self.folder):
             if filename.endswith(".txt"):
                 student_id = filename.replace(".txt", "")
-                data.append(self.get_student(student_id))
+                student_data = self.get_student(student_id)
+                if student_data: # Ensure data was read successfully
+                    data.append(student_data)
         return data
 
     # Print Student 
@@ -83,56 +99,3 @@ class StudentManager:
         for key, value in student.items():
             print(f"{key}: {value}")
         print("---------------------------\n")
-
-
-# EXAMPLE USAGE (DEMO)
-if __name__ == "__main__":
-    manager = StudentManager()
-
-    # Add Students
-    print("Add students:\n")
-    manager.add_student({
-        "student_id": "001",
-        "first_name": "Maria",
-        "last_name": "Ibraheem",
-        "dob": "2000-07-26",
-        "department": "Computer Engineering",
-        "email": "maria@example.edu",
-        "enrollment_year": 2019,
-        "gpa": 2.2,
-        "status": "enrolled"
-    })
-
-    manager.add_student({
-        "student_id": "002",
-        "first_name": "Mark",
-        "last_name": "Magdy",
-        "dob": "2002-11-02",
-        "department": "Mechanical Engineering",
-        "email": "mark@example.edu",
-        "enrollment_year": 2020,
-        "gpa": 3.5,
-        "status": "enrolled"
-    })
-
-    # List students 
-    print("Listing all students:")
-    for st in manager.list_students():
-        manager.print_student(st)
-
-    # Edit Maria
-    print("Edit Maria's email:\n")
-    manager.edit_student("001", {"email": "maria.newmail@uni.edu"})
-
-    # Print edited Maria
-    print("Updated Maria:")
-    manager.print_student(manager.get_student("001"))
-
-    # Delete Mark
-    print("Deleting Mark:\n")
-    manager.delete_student("002")
-
-    # List remaining students
-    print("Final Students List:")
-    for st in manager.list_students():
-        manager.print_student(st)

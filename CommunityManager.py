@@ -131,13 +131,20 @@ class CommunityManager:
             ]
 
             if student_courses:
-                student_department = self.curriculum_manager.get_course(student_courses[0]).department
+                # Assuming the first course's department is the student's primary department for announcements
+                # A more robust system might track this explicitly
+                try:
+                    course_obj = self.curriculum_manager.get_course(student_courses[0])
+                    if course_obj:
+                        student_department = course_obj.department
+                except:
+                    pass # Ignore if course not found
 
         for ann in self.announcements:
-            if ann.target["type"] == "course" and ann.target.get("course_code") in student_courses:
+            if ann.target.get("type") == "course" and ann.target.get("course_code") in student_courses:
                 visible.append(ann)
 
-            elif ann.target["type"] == "department" and ann.target.get("department") == student_department:
+            elif ann.target.get("type") == "department" and ann.target.get("department") == student_department:
                 visible.append(ann)
 
         return visible
@@ -178,16 +185,20 @@ class CommunityManager:
         if not self.lms_manager:
             return result
 
-        for student_id in self.get_parent_students(parent_id):
-            result[student_id] = {}
+        student_ids = self.get_parent_students(parent_id)
+        if not student_ids:
+            return result
 
-            # Iterate through all courses by scanning gradebooks folder
-            # (Same philosophy as LMSManager)
+        for student_id in student_ids:
+            result[student_id] = {}
             try:
-                for course_code in self.lms_manager.get_gradebook(course_code=None).grades.keys():
-                    gradebook = self.lms_manager.get_gradebook(course_code)
-                    result[student_id][course_code] = gradebook.get_student_grades(student_id)
-            except Exception:
-                pass
+                # Attempt to get gradebooks for courses student is enrolled in
+                student_courses = self.curriculum_manager.get_student_courses(student_id)
+                for course in student_courses:
+                    gradebook = self.lms_manager.get_gradebook(course.course_code)
+                    result[student_id][course.course_code] = gradebook.get_student_grades(student_id)
+            except Exception as e:
+                print(f"Error fetching academic progress for {student_id}: {e}")
+                # Continue to next student or course
 
         return result
