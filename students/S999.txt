@@ -1,0 +1,8 @@
+student_id: S999
+first_name: Smoke
+last_name: Test
+department: TestDept
+enrollment_year: 2025
+email: smoke@test
+gpa: 4.0
+status: enrolled

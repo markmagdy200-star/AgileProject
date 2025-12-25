@@ -1,0 +1,12 @@
+{
+    "course_code": "DBG101",
+    "course_name": "Debugging 101",
+    "credits": 3,
+    "department": "CS",
+    "description": "Debugging course",
+    "prerequisites": [],
+    "is_core": false,
+    "semesters_offered": [],
+    "professor_id": "PD999",
+    "students_enrolled": []
+}

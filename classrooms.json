@@ -1,0 +1,57 @@
+[
+    {
+        "id": "R101",
+        "capacity": 30,
+        "location": "West Wing",
+        "is_under_maintenance": false,
+        "maintenance_notes": []
+    },
+    {
+        "id": "R102",
+        "capacity": 50,
+        "location": "East Wing",
+        "is_under_maintenance": true,
+        "maintenance_notes": [
+            "Projector bulb replacement",
+            "Projector bulb replacement",
+            "Projector bulb replacement",
+            "Projector bulb replacement",
+            "Projector bulb replacement"
+        ]
+    },
+    {
+        "id": "R201",
+        "capacity": 25,
+        "location": "North Wing",
+        "is_under_maintenance": false,
+        "maintenance_notes": []
+    },
+    {
+        "id": "R200",
+        "capacity": 30,
+        "location": "Building X",
+        "is_under_maintenance": false,
+        "maintenance_notes": []
+    },
+    {
+        "id": "DBG01",
+        "capacity": 20,
+        "location": "LabDBG",
+        "is_under_maintenance": false,
+        "maintenance_notes": []
+    },
+    {
+        "id": "DBG02",
+        "capacity": 25,
+        "location": "LabDBG2",
+        "is_under_maintenance": false,
+        "maintenance_notes": []
+    },
+    {
+        "id": "FR101",
+        "capacity": 35,
+        "location": "Final Hall",
+        "is_under_maintenance": false,
+        "maintenance_notes": []
+    }
+]

@@ -1,0 +1,10 @@
+{
+    "course_code": "CS201",
+    "grades": {},
+    "grading_scheme": {
+        "assignments": 40,
+        "quizzes": 20,
+        "midterm": 20,
+        "final_exam": 20
+    }
+}

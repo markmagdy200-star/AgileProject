@@ -1,0 +1,61 @@
+{
+    "P001": {
+        "id": "P001",
+        "name": "Dr. Emily Carter",
+        "department": "Computer Engineering",
+        "email": "emily.carter@uni.edu",
+        "courses_taught": []
+    },
+    "P002": {
+        "id": "P002",
+        "name": "Prof. John Smith",
+        "department": "Mechanical Engineering",
+        "email": "john.smith@uni.edu",
+        "courses_taught": []
+    },
+    "P999": {
+        "id": "P999",
+        "name": "Dr. Smoke",
+        "department": "Testing",
+        "email": "dr.smoke@test",
+        "courses_taught": [
+            "CS999"
+        ]
+    },
+    "PD999": {
+        "id": "PD999",
+        "name": "ProfDbg",
+        "department": "CS",
+        "email": "pdb@example.com",
+        "courses_taught": [
+            "DBG101"
+        ]
+    },
+    "PD998": {
+        "id": "PD998",
+        "name": "ProfDbg2",
+        "department": "EE",
+        "email": "pdb2@example.com",
+        "courses_taught": [
+            "DBG102"
+        ]
+    },
+    "PF1": {
+        "id": "PF1",
+        "name": "ProfFinal",
+        "department": "CS",
+        "email": "pf1@example.com",
+        "courses_taught": [
+            "F101"
+        ]
+    },
+    "P003": {
+        "id": "P003",
+        "name": "Dr. Alex Lee",
+        "department": "Electrical Engineering",
+        "email": "alex.lee@uni.edu",
+        "courses_taught": [
+            "EE201"
+        ]
+    }
+}

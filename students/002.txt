@@ -1,0 +1,8 @@
+student_id: 002
+first_name: Mark
+last_name: Magdy
+department: Mechanical Engineering
+enrollment_year: 2020
+email: mark@example.edu
+gpa: 3.5
+status: enrolled

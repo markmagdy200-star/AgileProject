@@ -1,0 +1,8 @@
+student_id: DBG100
+first_name: Dbg
+last_name: User
+department: CS
+enrollment_year: 2026
+email: N/A
+gpa: N/A
+status: enrolled

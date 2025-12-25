@@ -1,0 +1,11 @@
+{
+    "content_id": "CONT_001",
+    "course_code": "CS101",
+    "title": "Introduction to Python Video",
+    "content_type": "video",
+    "url_or_path": "https://example.com/python-intro.mp4",
+    "description": "A basic Python tutorial.",
+    "created_date": "2025-12-25T01:09:16.192508",
+    "views": 0,
+    "views_by": []
+}

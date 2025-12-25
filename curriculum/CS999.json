@@ -1,0 +1,12 @@
+{
+    "course_code": "CS999",
+    "course_name": "Advanced Testing",
+    "credits": 3,
+    "department": "Engineering",
+    "description": "Testing course for smoke tests",
+    "prerequisites": [],
+    "is_core": true,
+    "semesters_offered": [],
+    "professor_id": "P999",
+    "students_enrolled": []
+}

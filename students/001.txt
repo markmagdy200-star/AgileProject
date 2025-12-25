@@ -1,0 +1,8 @@
+student_id: 001
+first_name: Maria
+last_name: Ibraheem
+department: Computer Engineering
+enrollment_year: 2019
+email: maria.newmail@uni.edu
+gpa: 2.5
+status: enrolled

@@ -1,0 +1,8 @@
+student_id: DBG200
+first_name: Dbg2
+last_name: User2
+department: EE
+enrollment_year: 2026
+email: N/A
+gpa: N/A
+status: enrolled

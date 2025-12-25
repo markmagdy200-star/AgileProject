@@ -1,0 +1,27 @@
+{
+    "course_code": "CS101",
+    "grades": {
+        "001": {
+            "assignments": {
+                "ASSIGN_001": {
+                    "grade": 85,
+                    "max": 100
+                }
+            },
+            "quizzes": {
+                "QUIZ_001": {
+                    "grade": 75,
+                    "max": 100
+                }
+            },
+            "exams": {},
+            "final_grade": 49.0
+        }
+    },
+    "grading_scheme": {
+        "assignments": 40,
+        "quizzes": 20,
+        "midterm": 20,
+        "final_exam": 20
+    }
+}

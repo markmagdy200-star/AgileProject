@@ -1,0 +1,8 @@
+student_id: TST100
+first_name: Test
+last_name: Student
+department: Engineering
+enrollment_year: 2026
+email: test.student@example.com
+gpa: 3.8
+status: enrolled

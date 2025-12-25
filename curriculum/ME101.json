@@ -1,0 +1,15 @@
+{
+    "course_code": "ME101",
+    "course_name": "Engineering Mechanics",
+    "credits": 3,
+    "department": "Mechanical Engineering",
+    "description": "Basic mechanics principles.",
+    "prerequisites": [],
+    "is_core": true,
+    "semesters_offered": [],
+    "professor_id": "",
+    "students_enrolled": [
+        "001",
+        "002"
+    ]
+}

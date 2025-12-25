@@ -1,0 +1,15 @@
+{
+    "course_code": "CS101",
+    "course_name": "Introduction to Programming",
+    "credits": 3,
+    "department": "Computer Engineering",
+    "description": "Basic programming concepts.",
+    "prerequisites": [],
+    "is_core": true,
+    "semesters_offered": [],
+    "professor_id": "",
+    "students_enrolled": [
+        "001",
+        "002"
+    ]
+}

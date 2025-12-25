@@ -104,14 +104,25 @@ class LicenseManager:
         license_obj.release_seat()
 
     def track_licenses(self):
-        return {
-            lid: {
-                "name": lic.name,
-                "used_seats": lic.used_seats,
-                "total_seats": lic.total_seats
+        """Return a mapping of license_id -> dict with name, used_seats, total_seats.
+        Supports both SoftwareLicense objects and legacy dict entries.
+        """
+        result = {}
+        for lid, lic in self.licenses.items():
+            if isinstance(lic, dict):
+                name = lic.get('name')
+                used = lic.get('used_seats', 0)
+                total = lic.get('total_seats', 0)
+            else:
+                name = getattr(lic, 'name', None)
+                used = getattr(lic, 'used_seats', 0)
+                total = getattr(lic, 'total_seats', 0)
+            result[lid] = {
+                "name": name,
+                "used_seats": used,
+                "total_seats": total
             }
-            for lid, lic in self.licenses.items()
-        }
+        return result
 
 
 # ---------------------------------------------------------

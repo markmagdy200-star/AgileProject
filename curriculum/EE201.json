@@ -1,0 +1,12 @@
+{
+    "course_code": "EE201",
+    "course_name": "Circuit Analysis",
+    "credits": 4,
+    "department": "Electrical Engineering",
+    "description": "Analysis of electrical circuits.",
+    "prerequisites": [],
+    "is_core": true,
+    "semesters_offered": [],
+    "professor_id": "P003",
+    "students_enrolled": []
+}

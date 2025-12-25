@@ -1,0 +1,12 @@
+{
+    "course_code": "F101",
+    "course_name": "Final Course",
+    "credits": 3,
+    "department": "CS",
+    "description": "Final desc",
+    "prerequisites": [],
+    "is_core": false,
+    "semesters_offered": [],
+    "professor_id": "PF1",
+    "students_enrolled": []
+}
