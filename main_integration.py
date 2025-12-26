@@ -1,4 +1,4 @@
-# main_integration.py - COMPLETE UPDATED VERSION WITH DATABASE LOCK FIX
+# main_integration.py
 import os
 from datetime import datetime, timedelta
 import atexit

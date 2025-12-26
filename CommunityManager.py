@@ -132,7 +132,6 @@ class CommunityManager:
 
             if student_courses:
                 # Assuming the first course's department is the student's primary department for announcements
-                # A more robust system might track this explicitly
                 try:
                     course_obj = self.curriculum_manager.get_course(student_courses[0])
                     if course_obj:

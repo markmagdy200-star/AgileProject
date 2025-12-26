@@ -1,4 +1,4 @@
-# database_schema.py - FIXED VERSION WITH CONNECTION MANAGEMENT
+# database_schema.py
 import sqlite3
 from datetime import datetime
 import threading
@@ -8,7 +8,7 @@ class UniversityDatabase:
         self.db_path = db_path
         self.timeout = timeout
         self.conn = None
-        self._lock = threading.RLock()  # Reentrant lock for thread safety
+        self._lock = threading.RLock()  # thread safety
         self.connect()
         self.create_tables()
     
@@ -62,7 +62,7 @@ class UniversityDatabase:
                     if "locked" in str(e) and attempt < max_retries - 1:
                         print(f"Database locked, retry {attempt + 1}/{max_retries}...")
                         import time
-                        time.sleep(0.1 * (attempt + 1))  # Exponential backoff
+                        time.sleep(0.1 * (attempt + 1))  # Exponential backoff, just like the iphone locking is done.
                         continue
                     raise
                 except Exception as e:
@@ -413,7 +413,7 @@ class UniversityDatabase:
             return []
     
     # =====================
-    # EXAMPLE: Using EAV for Licenses
+    # Using EAV for Licenses
     # =====================
     
     def create_license_entity(self, license_id, name, total_seats):
@@ -441,7 +441,7 @@ class UniversityDatabase:
         return False
     
     # =====================
-    # EXAMPLE: Using EAV for Announcements
+    #  Using EAV for Announcements
     # =====================
     
     def create_announcement_entity(self, title, content, target_type, target_value):

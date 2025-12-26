@@ -1,4 +1,4 @@
-# test_database.py - UPDATED VERSION
+# test_database.py
 try:
     from University_Controller import UniversityController
     from database_schema import UniversityDatabase

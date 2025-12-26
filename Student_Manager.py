@@ -5,7 +5,6 @@ import shutil
 class StudentManager:
     def __init__(self, folder="students"):
         self.folder = folder
-        # FIX: Removed shutil.rmtree to prevent data loss on startup
         if not os.path.exists(folder):
             os.makedirs(folder)
 
@@ -79,7 +78,7 @@ class StudentManager:
     def list_students(self):
         data = []
         if not os.path.exists(self.folder):
-            return data # Return empty list if folder doesn't exist
+            return data 
             
         for filename in os.listdir(self.folder):
             if filename.endswith(".txt"):

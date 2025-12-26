@@ -1,4 +1,4 @@
-# University_Controller.py - FIXED VERSION WITH DATABASE LOCK FIX
+# University_Controller.py
 from Student_Manager import StudentManager
 from Curriculum_Manager import CurriculumManager
 from LMS_Manager import LMSManager

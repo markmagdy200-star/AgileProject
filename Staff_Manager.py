@@ -57,15 +57,15 @@ class StaffManager:
     def professor_exists(self, prof_id):
         return prof_id in self.professors
 
-    # Placeholder methods from original StaffMember (kept for context if needed, but not managed by this class)
+    # Placeholder methods from original StaffMember (kept for context maintenance, but not managed by this class)
     # These are not implemented for StaffManager as it focuses on professors.
-    # If you need TA/HR functionality, a separate manager would be required.
+    # If you need TA/HR functionality, a separate manager is required.
     # def assign_task(self, task): pass
     # def complete_task(self, task): pass
     # def fail_to_complete_task(self, task): pass
     # def view_performance(self): pass
     # def issue_reward(self, reward): pass
-    # def view_payroll(self): raise NotImplementedError("Method not implemented")
-    # def request_leave(self, start_date: str, end_date: str): raise NotImplementedError("Method not implemented")
-    # def view_leave(self): raise NotImplementedError("Method not implemented")
-    # def view_benefits(self): raise NotImplementedError("Method not implemented")
+    # def view_payroll(self): raise NotImplemented("Method not implemented")
+    # def request_leave(self, start_date: str, end_date: str): raise NotImplemented("Method not implemented")
+    # def view_leave(self): raise NotImplemented("Method not implemented")
+    # def view_benefits(self): raise NotImplemented("Method not implemented")
