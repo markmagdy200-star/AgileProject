@@ -40,5 +40,19 @@
         "reserved_by": "Prof. P001",
         "start_str": "2025-12-25T03:00:00",
         "end_str": "2025-12-25T04:00:00"
+    },
+    {
+        "id": 7,
+        "classroom_id": "R101",
+        "reserved_by": "Prof. P001",
+        "start_str": "2025-12-27T02:00:00",
+        "end_str": "2025-12-27T03:00:00"
+    },
+    {
+        "id": 8,
+        "classroom_id": "FR101",
+        "reserved_by": "457",
+        "start_str": "2025-12-27T03:00:00",
+        "end_str": "2025-12-27T04:00:00"
     }
 ]

@@ -57,5 +57,14 @@
         "courses_taught": [
             "EE201"
         ]
+    },
+    "457": {
+        "id": "457",
+        "name": "mo",
+        "department": "physics",
+        "email": "irubre@eng.asu",
+        "courses_taught": [
+            "CS101"
+        ]
     }
 }

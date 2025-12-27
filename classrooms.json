@@ -16,6 +16,7 @@
             "Projector bulb replacement",
             "Projector bulb replacement",
             "Projector bulb replacement",
+            "Projector bulb replacement",
             "Projector bulb replacement"
         ]
     },
@@ -53,5 +54,14 @@
         "location": "Final Hall",
         "is_under_maintenance": false,
         "maintenance_notes": []
+    },
+    {
+        "id": "911A",
+        "capacity": 50,
+        "location": "2nd floor Credit building",
+        "is_under_maintenance": true,
+        "maintenance_notes": [
+            "water leakage"
+        ]
     }
 ]

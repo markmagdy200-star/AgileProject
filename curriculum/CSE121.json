@@ -1,0 +1,12 @@
+{
+    "course_code": "CSE121",
+    "course_name": "Engineering Materials",
+    "credits": 4,
+    "department": "Electrical Engineering",
+    "description": "Basic Materials engineering",
+    "prerequisites": [],
+    "is_core": false,
+    "semesters_offered": [],
+    "professor_id": "",
+    "students_enrolled": []
+}
